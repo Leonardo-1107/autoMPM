@@ -6,9 +6,10 @@ from model import Model
 """
 Here is a new method to choose a better machine learning model before the main preocess to optimize
 To balance the performance and time consumption, Each method to be selected will be iterated 3 times, 
-and the best score obtained will be used as the evaluation criterion
+and the best score obtained will be used as the evaluation criterion .The model that gets the highest
+score will be selected in the follow up process
 
-The model that gets the highest score will be selected in the follow up process
+This feature can be enabled in test.py by calling Method_select class
 """
 
 class Method_select:
