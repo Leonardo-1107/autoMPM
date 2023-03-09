@@ -302,7 +302,7 @@ def getDepositMask(name = 'Washington'):
     
     if name == 'Bayesian_main/data/North_Idaho.pkl':
         data_dir = 'Bayesian_main/dataset/North Idaho'
-        mask_ds = rasterio.open(data_dir+'/Raster/Geochemistry/b')
+        mask_ds = rasterio.open(data_dir+'/Shapefiles/mask.tif')
         mask_data = mask_ds.read(1)
         mask = mask_data == 1
         au = geopandas.read_file(data_dir+'/Shapefiles/Au.shp')
