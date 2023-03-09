@@ -8,14 +8,15 @@ import os
 if __name__=="__main__":
     path = 'Bayesian_main/data/North_Idaho.pkl'
 
-    # algo_list = [rfcAlgo, svmAlgo, logiAlgo]
-    # method = Method_select(algo_list)
-    # score = method.select(data_path=path, task=Model)
-    # print("Use" + str()) algo_list[score.index(max(score))]
+    algo_list = [rfcAlgo, svmAlgo, logiAlgo]
+    method = Method_select(algo_list)
+    score = method.select(data_path=path, task=Model)
+    print("Use" + str()) 
 
     bo = Bayesian_optimization(
         data_path=path, 
-        algorithm=rfcAlgo, 
+        algorithm=algo_list[score.index(max(score))], 
+        mode='random',
         default_params= True
         )
     

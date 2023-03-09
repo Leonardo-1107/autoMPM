@@ -26,7 +26,7 @@ class Bayesian_optimization:
     WARNING_WORKER_HIGH = 20        # If worker is set to be higher than this, a warning will show up
     
 
-    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
+    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
         """Initialize the target task, the algorithm to accomplish the task and settings of corresponding hyperparamters
 
         Args:
@@ -46,7 +46,7 @@ class Bayesian_optimization:
             path(string): The string to record the name of data estimated.
         """
         self.gaussian = GaussianProcessRegressor(kernel=ConstantKernel(cons_value, constant_value_bounds="fixed") * RBF(rbf_value, length_scale_bounds="fixed"))
-        self.task = task(data_path=data_path, algorithm=algorithm)
+        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode)
         
         if default_params:
             self.param_space = ParamSpace(algorithm.DEFAULT_CONTINUOUS_BOOK, algorithm.DEFAULT_DISCRETE_BOOK, algorithm.DEFAULT_ENUM_BOOK, algorithm.DEFAULT_STATIC_BOOK)
