@@ -271,19 +271,16 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
 
 def show_result_map(result_values, mask, deposit_mask, test_index = 0):
     
-    validYArray, validXArray = np.where(mask == 1)
+    validYArray, validXArray = np.where(mask > 0)
     dep_YArray, dep_XArray = np.where(deposit_mask == 1)
-    result_array = np.zeros_like(mask,dtype = "float")
+    result_array = np.zeros_like(deposit_mask, dtype = "float")
 
     result_array[~mask] = np.nan
-    count = 0
-   
     for i in range(len(validYArray)):
         result_array[validYArray[i], validXArray[i]] = result_values[i]
-    
 
     pylab.imshow(result_array)
-    # pylab.scatter(dep_XArray, dep_YArray, c='r', s=5)
+    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5)
     pylab.colorbar(label="0/1", orientation="horizontal")
     pylab.savefig('result_map.png')
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
@@ -300,32 +297,33 @@ def getDepositMask(name = 'Washington'):
     if name == 'Bayesian_main/data/NovaScotia2.pkl':
         return np.load("Bayesian_main/dataset/NovaScotia2/Target.npy")
     
-    if name == 'Bayesian_main/data/North_Idaho.pkl':
+    if 'North' in name:
         data_dir = 'Bayesian_main/dataset/North Idaho'
         mask_ds = rasterio.open(data_dir+'/Shapefiles/mask.tif')
         mask_data = mask_ds.read(1)
-        mask = mask_data == 1
+        mask = mask_data > 0
         au = geopandas.read_file(data_dir+'/Shapefiles/Au.shp')
         
-    if name == 'Bayesian_main/data/Washington.pkl':
+        
+    if 'Washington' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/Washington/shapefile/mask1.tif')
         mask_data = mask_ds.read(1)
         mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/Washington/shapefile/Au.shp')
     
-    if name == 'Bayesian_main/data/bm_lis_go_sesrp.pkl':
+    if 'bm_lis' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/bm_lis_go_sesrp/raster/mask.tif')
         mask_data = mask_ds.read(1)
         mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/bm_lis_go_sesrp/shapefile/bm_lis_go_quartzveinsAu.shp')
 
-    if name == 'Bayesian_main/data/nefb_fb_hlc_cir.pkl':
+    if 'nefb' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/nefb_fb_hlc_cir/raster/mask1.tif')
         mask_data = mask_ds.read(1)
         mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/nefb_fb_hlc_cir/shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp')
     
-    if name == 'Bayesian_main/data/tok_lad_scsr_ahc.pkl':
+    if 'tok_lad' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/tok_lad_scsr_ahc/raster/mask.tif')
         mask_data = mask_ds.read(1)
         mask = mask_data == 1

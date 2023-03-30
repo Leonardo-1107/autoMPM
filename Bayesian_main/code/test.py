@@ -6,21 +6,26 @@ import os
 
 
 if __name__=="__main__":
-    path = 'Bayesian_main/data/North_Idaho.pkl'
+    path_list = ['bm_lis_go_sesrp', 'nefb_fb_hlc_cir', 'North_Idaho', 'tok_lad_scsr_ahc', 'Washington']
+    for name in path_list:
+        path = f'Bayesian_main/data/{name}.pkl'
 
-    algo_list = [rfcAlgo, svmAlgo, logiAlgo]
-    method = Method_select(algo_list)
-    score = method.select(data_path=path, task=Model)
-    print("Use" + str()) 
+    # Automatically decide an algorithm
+    # algo_list = [rfcAlgo, svmAlgo, logiAlgo]
+    # method = Method_select(algo_list)
+    # score = method.select(data_path=path, task=Model)
+    # algo = algo_list[score.index(max(score))]
+    # print("Use" + str(algo)) 
 
-    bo = Bayesian_optimization(
-        data_path=path, 
-        algorithm=algo_list[score.index(max(score))], 
-        mode='random',
-        default_params= True
-        )
-    
-    x_best = bo.optimize(40)
-    
-    # for rfcAlgo estimation
-    print(f'Best   n_estimators: {x_best[0]}, max_depth: {x_best[1]}, criterion: {x_best[2]}')
+    # Bayesian optimization process
+        bo = Bayesian_optimization(
+            data_path=path, 
+            algorithm=rfcAlgo, 
+            mode='k',
+            default_params= True
+            )
+        
+        x_best = bo.optimize(40)
+        
+        # for rfcAlgo estimation
+        print(f'Best   n_estimators: {x_best[0]}, max_depth: {x_best[1]}, criterion: {x_best[2]}')
