@@ -210,10 +210,7 @@ class Model:
                 metric = Model.DEFAULT_METRIC
             metric_list.append(metric)
             
-        # # Scaler Debug
-        # scaler = StandardScaler()
-        # scaler.fit(self.feature_arr)
-        # self.feature_arr = scaler.transform(self.feature_arr)
+
         score_list = []
         if self.mode  == 'random':
             # N fold-cross
@@ -246,10 +243,10 @@ class Model:
                 
                 scores = []
                 for metric in metric_list:
-                    if metric == f1_score:
+                    if metric == f1_score or metric == precision_score:
                         # Only make sense when data augment deployed
-                        score = f1_score(y_true=y_test_fold, y_pred=pred_arr)
-                        scores.append(score)
+                        score = metric(y_true=y_test_fold, y_pred=pred_arr)
+                        scores.append(score) 
                     else:
                         score = metric(y_test_fold, y_arr)
                         scores.append(score)
@@ -307,11 +304,4 @@ if __name__ == '__main__':
     
     y = task.evaluate(x)
     print(y)
-
-    namelist = ['B', 'Ca1', 'Co1', 'Cr1', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Sr', 'V', 'Y', 'Zn']
-    feature_importances = np.load('Bayesian_main/weights.npy')
-    for i in range(len(namelist)):
-        # if feature_importances[i] > 0.047823:
-        #     print(f'{namelist[i] }:  {feature_importances[i]:6f}')
-        print(f'{namelist[i] }:  {feature_importances[i]:6f}')
     
