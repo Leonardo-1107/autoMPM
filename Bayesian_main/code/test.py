@@ -6,7 +6,7 @@ import os
 
 
 if __name__=="__main__":
-    path_list = ['bm_lis_go_sesrp', 'nefb_fb_hlc_cir', 'North_Idaho', 'tok_lad_scsr_ahc', 'Washington']
+    path_list = ['North_Idaho', 'bm_lis_go_sesrp', 'nefb_fb_hlc_cir', 'tok_lad_scsr_ahc', 'Washington']
     for name in path_list:
         path = f'Bayesian_main/data/{name}.pkl'
 
@@ -25,7 +25,7 @@ if __name__=="__main__":
             default_params= True
             )
         
-        x_best = bo.optimize(40)
+        x_best = bo.optimize(20)
         
         # for rfcAlgo estimation
         print(f'Best   n_estimators: {x_best[0]}, max_depth: {x_best[1]}, criterion: {x_best[2]}')

@@ -6,7 +6,7 @@ from multiprocessing import Process, Queue
 import numpy as np
 from algo import rfcAlgo, mlpAlgo
 from sklearn.cluster import KMeans
-from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, plot_roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, plot_roc_curve, accuracy_score
 from sklearn.model_selection import train_test_split
 
 from utils import show_result_map, getDepositMask
@@ -160,17 +160,17 @@ class Model:
             X_train_fold, X_test_fold = self.feature_arr[train_mask], self.feature_arr[test_mask]
             y_train_fold, y_test_fold = self.label_arr[train_mask], self.label_arr[test_mask]
             
-            # Modify y_test_fold
+            # Modify
             if modify:
-                true_num = y_test_fold.sum()
-                index = np.arange(len(y_test_fold))
-                true_test = index[y_test_fold == 1]
-                false_test = np.random.permutation(index[y_test_fold == 0])[:true_num]
-                test = np.concatenate([true_test, false_test])
-                X_test_fold = X_test_fold[test]
-                y_test_fold = y_test_fold[test]
+                true_num = y_train_fold.sum()
+                index = np.arange(len(y_train_fold))
+                true_train = index[y_train_fold == 1]
+                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num]
+                train = np.concatenate([true_train, false_train])
+                X_train_fold = X_train_fold[train]
+                y_train_fold = y_train_fold[train]
                 
-            dataset = (X_train_fold, y_train_fold, X_test_fold, y_test_fold)
+            dataset = (X_train_fold, X_test_fold, y_train_fold, y_test_fold)
             dataset_list.append(dataset)
         
         return tmpt, dataset_list
@@ -209,7 +209,7 @@ class Model:
         return X_train_fold, X_test_fold, y_train_fold, y_test_fold
     
     
-    def train(self, params,  metrics=['pre','f1','auc'], test_mask=None, modify=False):
+    def train(self, params,  metrics=['auc','f1'], test_mask=None, modify=False):
         """Train a random forest with test-set as a rectangle
 
         Args:
@@ -236,6 +236,8 @@ class Model:
                     metric = f1_score
                 elif metric.lower() == 'precision_score' or metric.lower() == 'pre':
                     metric = precision_score
+                elif metric.lower() == 'accuracy_score' or metric.lower() == 'accuracy' or metric.lower() == 'acc':
+                    metric = precision_score
                 elif metric.lower() == 'plot_roc' or metric.lower() == 'plot':
                     metric = plot_roc_curve    
                 else:
@@ -258,7 +260,7 @@ class Model:
                 pred_arr, y_arr = algo.predicter(X_test_fold)
                 scores = []
                 for metric in metric_list:
-                    if metric == f1_score or metric == precision_score:
+                    if metric == f1_score or metric == precision_score or metric== accuracy_score:
                         # Only make sense when data augment deployed
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score) 
@@ -273,14 +275,14 @@ class Model:
         else: 
             test_mask, dataset_list = self.dataset_split(test_mask, modify)
             for dataset in dataset_list:
-                X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
+                X_train_fold, X_test_fold, y_train_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
                 pred_arr, y_arr = algo.predicter(X_test_fold)
                 
                 scores = []
                 for metric in metric_list:
-                    if metric == f1_score or metric == precision_score:
+                    if metric == f1_score or metric == precision_score or metric== accuracy_score:
                         # Only make sense when data augment deployed
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score)
@@ -292,8 +294,8 @@ class Model:
                     scores = scores[0]
                 score_list.append(scores)
 
-        result_arr = algo.predict(self.feature_arr)
-        show_result_map(result_values = result_arr, mask=self.common_mask, deposit_mask = getDepositMask(self.path))
+        # result_arr = algo.predict(self.feature_arr)
+        # show_result_map(result_values = result_arr, mask=self.common_mask, deposit_mask = getDepositMask(self.path))
         return score_list
 
     def obj_train_parallel(self, queue, args):
