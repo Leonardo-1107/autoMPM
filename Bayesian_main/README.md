@@ -5,7 +5,6 @@
 + **optimization.py**:  Bayesian optimization
 + **constraints.py** :  Encapsulation of hyperparameter settings
 + **model.py**:  The model of auto machine learning algorithm
-+ **mlmodel.py**:  The model of traditional machine learning algorithm
 + **algo.py**:  Encapsulation of algorithms
 + **method.py**:  Automatically select the algorithm
 + **utils.py**:  Data pre-process and visualization
