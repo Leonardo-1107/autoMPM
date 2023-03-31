@@ -4,7 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import pylab
+import heapq
+import scipy.stats as ss
 from scipy.interpolate import interp2d
+from sklearn.ensemble import RandomForestClassifier
 import pykrige
 import time
 
@@ -82,6 +85,11 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     label_arr2d = augment_2D(label_arr2d)
     label_arr = label_arr2d[mask]
     
+    # Feature filtering by corr
+    feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
+    # Feature filtering by weights of RFC
+    feature_arr = feature_selecter_algo(feature_arr, label_arr)
+
     # Pack and save dataset
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, feature_list)
     with open(output_path, 'wb') as f:
@@ -164,6 +172,11 @@ def preprocess_data_interpolate(data_dir='Washington'):
     ground_label_arr = label_arr2d[mask]
     label_arr2d = augment_2D(label_arr2d)
     label_arr = label_arr2d[mask]
+
+    # Feature filtering by corr
+    feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
+    # Feature filtering by weights of RFC
+    feature_arr = feature_selecter_algo(feature_arr, label_arr)
     
     geochemistry = geopandas.read_file(data_dir+'/shapefile/Geochemistry.shp')   
     feature_list = ['B', 'Ca', 'Cu', 'Fe', 'Mg', 'Ni']
@@ -220,10 +233,9 @@ def preprocess_data_interpolate(data_dir='Washington'):
         pickle.dump(dataset, f)
 
 
-
 def augment_2D(array):
     """
-    For data augment use. Assign the 3*3 blocks around the sites to be labeled.
+    For data augment function. Assign the 3*3 blocks around the sites to be labeled.
     """
     new = array.copy()
     a = np.where(array == 1)
@@ -239,52 +251,44 @@ def augment_2D(array):
                  
     return new
 
-def plot_roc(fpr, tpr, index, scat=False, save=True):
-    plt.figure()
-    plt.plot(fpr, tpr, color="darkorange",)
-    plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
-    if scat:
-        plt.scatter(fpr, tpr)
-    plt.title("ROC curve for mineral prediction")
-    plt.xlabel("False positive rate")
-    plt.ylabel("True positive rate")
-    if save:
-        plt.savefig(f'../pictures/{index}_roc.png')
-    else:
-        plt.show()    
 
-def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
-
-    plt.figure(dpi=150)
-    x, y = common_mask.nonzero()
-    positive_x = x[label_arr.astype(bool)]
-    positive_y = y[label_arr.astype(bool)]
-    test_x, test_y = test_mask.nonzero()
-    plt.scatter(x, y)
-
-    plt.scatter(test_x, test_y, color='red')
-    plt.scatter(positive_x, positive_y, color='gold')
-    plt.legend(['Valid Region', 'Test-set', 'Positive samples'])
+def feature_selecter_corr(feature_arr, label_arr):
+    """
+    Initial screening of features by calculating correlation coefficients.
+    """
+    corr_list = []
+    for i in range(feature_arr.shape[1]): 
+        feature_slice = feature_arr[:,i]
+        corr = ss.pearsonr(feature_slice, label_arr)
+        corr_list.append(corr[0])
     
-    if save_path is not None:
-        plt.savefig(save_path)
-
-def show_result_map(result_values, mask, deposit_mask, test_index = 0):
+    threshold = heapq.nlargest(50, corr_list)[49]
+    select_list = [x>= threshold for x in corr_list]
     
-    validYArray, validXArray = np.where(mask > 0)
-    dep_YArray, dep_XArray = np.where(deposit_mask == 1)
-    result_array = np.zeros_like(deposit_mask, dtype = "float")
-
-    result_array[~mask] = np.nan
-    for i in range(len(validYArray)):
-        result_array[validYArray[i], validXArray[i]] = result_values[i]
-
-    pylab.imshow(result_array)
-    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5)
-    pylab.colorbar(label="0/1", orientation="horizontal")
-    pylab.savefig('result_map.png')
-    t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
-    print(f"--- {t} New feature map Saved\n")
+    selected_feature_arr = []
+    for i in range(feature_arr.shape[1]):
+        if select_list[i]:
+            selected_feature_arr.append(feature_arr[:,i])
+    
+    return np.array(selected_feature_arr).T
+    
+def feature_selecter_algo(feature_arr, label_arr, n = 20):
+    """
+    Fine screening of features by the weights obtained in the random forest algorithm.
+    """
+    rfc = RandomForestClassifier()
+    rfc.fit(feature_arr, label_arr)
+    
+    weights = rfc.feature_importances_
+    threshold = heapq.nlargest(n, weights)[n-1]
+    select_list = [x>= threshold for x in weights]
+    
+    selected_feature_arr = []
+    for i in range(feature_arr.shape[1]):
+        if select_list[i]:
+            selected_feature_arr.append(feature_arr[:,i])
+    
+    return np.array(selected_feature_arr).T
 
 def getDepositMask(name = 'Washington'):
     """
@@ -341,8 +345,57 @@ def getDepositMask(name = 'Washington'):
         label_arr2d[x, y] = 1
 
     return label_arr2d
+
+def plot_roc(fpr, tpr, index, scat=False, save=True):
+    plt.figure()
+    plt.plot(fpr, tpr, color="darkorange",)
+    plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
+    if scat:
+        plt.scatter(fpr, tpr)
+    plt.title("ROC curve for mineral prediction")
+    plt.xlabel("False positive rate")
+    plt.ylabel("True positive rate")
+    if save:
+        plt.savefig(f'../pictures/{index}_roc.png')
+    else:
+        plt.show()    
+
+def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
+
+    plt.figure(dpi=150)
+    x, y = common_mask.nonzero()
+    positive_x = x[label_arr.astype(bool)]
+    positive_y = y[label_arr.astype(bool)]
+    test_x, test_y = test_mask.nonzero()
+    plt.scatter(x, y)
+
+    plt.scatter(test_x, test_y, color='red')
+    plt.scatter(positive_x, positive_y, color='gold')
+    plt.legend(['Valid Region', 'Test-set', 'Positive samples'])
+    
+    if save_path is not None:
+        plt.savefig(save_path)
+
+def show_result_map(result_values, mask, deposit_mask, test_index = 0):
+    
+    validYArray, validXArray = np.where(mask > 0)
+    dep_YArray, dep_XArray = np.where(deposit_mask == 1)
+    result_array = np.zeros_like(deposit_mask, dtype = "float")
+
+    result_array[~mask] = np.nan
+    for i in range(len(validYArray)):
+        result_array[validYArray[i], validXArray[i]] = result_values[i]
+
+    pylab.imshow(result_array)
+    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5)
+    pylab.colorbar(label="0/1", orientation="horizontal")
+    pylab.savefig('result_map.png')
+    t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
+    print(f"--- {t} New feature map Saved\n")
     
 
 if __name__=="__main__":
+    # For datasets preprocess, except Washington
     preprocess_all_data()
-    # preprocess_data_interpolate()
+    # Specially for Washington
+    preprocess_data_interpolate()
