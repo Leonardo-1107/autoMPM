@@ -10,6 +10,7 @@ from scipy.interpolate import interp2d
 from sklearn.ensemble import RandomForestClassifier
 import pykrige
 import time
+import os
 
 
 """
@@ -17,7 +18,7 @@ The early stage data preprocess and some plot functions.
 
 """
 
-def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B', 'Ca', 'Co', 'Cr', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Y'], feature_prefix='', feature_suffix='.tif', mask='raster/mask1.tif', target_name='Au', label_path_list=['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'], label_filter=True, output_path='./data/nefb_fb_hlc_cir.pkl'):
+def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B', 'Ca', 'Co', 'Cr', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Y'], feature_prefix='', feature_suffix='.tif', mask='raster/mask1.tif', target_name='Au', label_path_list=['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'], label_filter=True, feature_filter=False, output_path='./data/nefb_fb_hlc_cir.pkl'):
     """Preprocess the dataset from raster files and shapefiles into feature, label and mask data
 
     Args:
@@ -29,6 +30,7 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
         target_name (str, optional): The name of target. Defaults to 'Au'.
         label_path_list (list, optional): The list of path of label raw data. Defaults to ['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'].
         label_filter (bool, optional): Whether to fileter the label raw data before process. Defaults to True.
+        feature_filter (bool, optional): Whether to fileter the raw features before process instead of using feature list. Defaults to False.
         output_path (str, optional): The path of output data files. Defaults to '../data/nefb_fb_hlc_cir.pkl'.
 
     Returns:
@@ -49,6 +51,19 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     mask_data = mask_ds.read(1)
     mask = mask_data != 0
     
+    # More features added and filtered 
+    if feature_filter:
+        dirs = os.listdir(data_dir + '/Shapefiles')
+        for feature in dirs:
+            if 'tif' in feature:
+                if 'toline.tif' in feature:
+                    continue
+                rst = rasterio.open(data_dir + '/Shapefiles/' + feature).read(1)
+                if rst.shape != mask.shape:
+                    continue
+                feature_list.append(feature)
+                feature_dict[feature] = np.array(rst) 
+
     # Preprocess feature
     feature_arr = np.zeros((mask.sum(),len(feature_list)))
     for i, feature in enumerate(feature_list):
@@ -85,17 +100,17 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     label_arr2d = augment_2D(label_arr2d)
     label_arr = label_arr2d[mask]
     
-    # Feature filtering by corr
-    feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
-    # Feature filtering by weights of RFC
-    feature_arr = feature_selecter_algo(feature_arr, label_arr)
+    if feature_filter:
+        # Feature filtering by corr
+        feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
+        # Feature filtering by weights of RFC
+        feature_arr = feature_selecter_algo(feature_arr, label_arr)
 
     # Pack and save dataset
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, feature_list)
     with open(output_path, 'wb') as f:
         pickle.dump(dataset, f)
-        
-    # return feature_arr, label_arr, mask, feature_list
+
 
 def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
     preprocess_data(
@@ -123,7 +138,7 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
         feature_list=['ba', 'ca', 'cr', 'cu', 'fe', 'la', 'mg', 'mn', 'ni', 'pb', 'sr', 'ti', 'v', 'y', 'zr'], 
         feature_prefix='Raster/Geochemistry/', 
         feature_suffix='', 
-        mask='Raster/grativity.tif', 
+        mask='Raster/Geochemistry/b', 
         target_name='Au', 
         label_path_list=['Shapefiles/Au.shp'], 
         label_filter=False, 
@@ -376,26 +391,30 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
     if save_path is not None:
         plt.savefig(save_path)
 
-def show_result_map(result_values, mask, deposit_mask, test_index = 0):
+def show_result_map(result_values, mask, deposit_mask, test_mask = None):
     
     validYArray, validXArray = np.where(mask > 0)
-    dep_YArray, dep_XArray = np.where(deposit_mask == 1)
+    dep_YArray, dep_XArray = np.where(np.logical_and(deposit_mask, test_mask) == 1)
     result_array = np.zeros_like(deposit_mask, dtype = "float")
 
-    result_array[~mask] = np.nan
+    
     for i in range(len(validYArray)):
-        result_array[validYArray[i], validXArray[i]] = result_values[i]
+        if test_mask[validYArray[i], validXArray[i]] > 0:
+            result_array[validYArray[i], validXArray[i]] = result_values[i]*100
+    
+    result_array[~mask] = np.nan
+    
+    pylab.imshow(result_array, cmap='cividis')
+    pylab.colorbar(label="0/1", orientation="vertical")
 
-    pylab.imshow(result_array)
-    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5)
-    pylab.colorbar(label="0/1", orientation="horizontal")
+    pylab.scatter(dep_XArray, dep_YArray, c='r', s=6, alpha=0.7)
     pylab.savefig('result_map.png')
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
-    print(f"--- {t} New feature map Saved\n")
-    
+    print(f"\t--- {t} New feature map Saved\n")
 
 if __name__=="__main__":
+    
     # For datasets preprocess, except Washington
     preprocess_all_data()
     # Specially for Washington
-    preprocess_data_interpolate()
+    # preprocess_data_interpolate()

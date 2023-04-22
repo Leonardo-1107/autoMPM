@@ -121,31 +121,28 @@ class Model:
         if test_mask_list is None:
             test_mask_list = []
             # Randomly choose the start grid
-            
             mask_sum = self.common_mask.sum()
             test_num = int(mask_sum / self.test_clusters)
             x_arr, y_arr = self.common_mask.nonzero()
+            
             positive_x = x_arr[self.label_arr.astype(bool)].reshape((-1,1))
             positive_y = y_arr[self.label_arr.astype(bool)].reshape((-1,1))
+            
             cll = self.km(positive_x, positive_y, self.test_clusters)
             
             for i in range(self.test_clusters):
                 cluster_arr = (cll == i)
+                # print(i, cluster_arr.sum()/self.label_arr.sum())
                 cluster_x = positive_x[cluster_arr].squeeze()
                 cluster_y = positive_y[cluster_arr].squeeze()
-                
-                start = np.random.randint(0, cluster_arr.sum())
-
-                # Throw exception cases
+                # Throw out the empty array
                 if len(cluster_x.shape) == 0:
                     continue
-
+                start = np.random.randint(0, cluster_arr.sum())
                 x, y = cluster_x[start], cluster_y[start]
                 test_mask = self.test_extend(x, y, test_num)
-                test_mask_list.append(test_mask)
-        else:
-            for test_mask in test_mask_list:
-                assert test_mask.shape == self.common_mask.shape
+                test_mask_list.append(test_mask) 
+
         # Buf the test mask
         tmpt = test_mask_list
 
@@ -158,9 +155,9 @@ class Model:
             train_mask = train_mask & self.common_mask
             train_mask = train_mask[self.common_mask]
             X_train_fold, X_test_fold = self.feature_arr[train_mask], self.feature_arr[test_mask]
-            y_train_fold, y_test_fold = self.label_arr[train_mask], self.label_arr[test_mask]
+            y_train_fold, y_test_fold = self.total_label_arr[1][train_mask], self.label_arr[test_mask]
             
-            # Modify
+            # Modify y_test_fold
             if modify:
                 true_num = y_train_fold.sum()
                 index = np.arange(len(y_train_fold))
@@ -169,13 +166,13 @@ class Model:
                 train = np.concatenate([true_train, false_train])
                 X_train_fold = X_train_fold[train]
                 y_train_fold = y_train_fold[train]
-                
-            dataset = (X_train_fold, X_test_fold, y_train_fold, y_test_fold)
+            
+            dataset = (X_train_fold, y_train_fold, X_test_fold, y_test_fold)
             dataset_list.append(dataset)
         
         return tmpt, dataset_list
     
-    def random_spilt(self, rate =0.2):
+    def random_spilt(self, rate =0.2, modify =False):
         """Split the dataset into train set and test set, repeated for the number of clusters
 
         Args:
@@ -195,8 +192,7 @@ class Model:
             index, 
             test_size=rate,
             shuffle=True)
-        
-        self.test_index = test_index
+
         X_train_fold, X_test_fold, y_train_fold, y_test_fold = [],[],[],[]
         for i in train_index:
             X_train_fold.append(feature[i])
@@ -205,11 +201,23 @@ class Model:
         for i in test_index:
             X_test_fold.append(feature[i])
             y_test_fold.append(ground_label[i])
+            
+        X_train_fold, X_test_fold, y_train_fold, y_test_fold = np.array(X_train_fold), np.array(X_test_fold), np.array(y_train_fold), np.array(y_test_fold)
         
+        if modify:
+                
+                true_num = y_train_fold.sum()
+                index = np.arange(len(y_train_fold))
+                true_train = index[y_train_fold == 1]
+                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num]
+                train = np.concatenate([true_train, false_train])
+                X_train_fold = X_train_fold[train]
+                y_train_fold = y_train_fold[train]
+                
         return X_train_fold, X_test_fold, y_train_fold, y_test_fold
     
     
-    def train(self, params,  metrics=['auc','f1'], test_mask=None, modify=False):
+    def train(self, params,  metrics=['auc','f1','pre'], test_mask=None, modify=False):
         """Train a random forest with test-set as a rectangle
 
         Args:
@@ -236,10 +244,7 @@ class Model:
                     metric = f1_score
                 elif metric.lower() == 'precision_score' or metric.lower() == 'pre':
                     metric = precision_score
-                elif metric.lower() == 'accuracy_score' or metric.lower() == 'accuracy' or metric.lower() == 'acc':
-                    metric = precision_score
-                elif metric.lower() == 'plot_roc' or metric.lower() == 'plot':
-                    metric = plot_roc_curve    
+     
                 else:
                     warnings.warn(f'Wrong metric! Replace it with default metric {Model.DEFAULT_METRIC.__name__}.')
                     metric = Model.DEFAULT_METRIC
@@ -254,13 +259,15 @@ class Model:
         if self.mode  == 'random':
             # N fold-cross
             for i in range(self.test_clusters):
-                X_train_fold, X_test_fold, y_train_fold, y_test_fold = self.random_spilt(rate=1/self.test_clusters) 
+                
+                X_train_fold, X_test_fold, y_train_fold, y_test_fold= self.random_spilt(rate=1/self.test_clusters, modify=modify) 
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
+                
                 pred_arr, y_arr = algo.predicter(X_test_fold)
                 scores = []
                 for metric in metric_list:
-                    if metric == f1_score or metric == precision_score or metric== accuracy_score:
+                    if metric == f1_score or metric == precision_score:
                         # Only make sense when data augment deployed
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score) 
@@ -273,29 +280,29 @@ class Model:
                 score_list.append(scores)
 
         else: 
-            test_mask, dataset_list = self.dataset_split(test_mask, modify)
+            # OoD by K-means
+            test_mask_list, dataset_list = self.dataset_split(test_mask, modify=modify)
             for dataset in dataset_list:
-                X_train_fold, X_test_fold, y_train_fold, y_test_fold = dataset
+                X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
                 pred_arr, y_arr = algo.predicter(X_test_fold)
-                
+            
                 scores = []
                 for metric in metric_list:
-                    if metric == f1_score or metric == precision_score or metric== accuracy_score:
+                    if metric == f1_score or metric == precision_score:
                         # Only make sense when data augment deployed
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score)
                     else:
                         score = metric(y_test_fold, y_arr)
-                        scores.append(score)
-                    
+                        scores.append(score)    
                 if len(scores) == 1:
                     scores = scores[0]
                 score_list.append(scores)
 
-        # result_arr = algo.predict(self.feature_arr)
-        # show_result_map(result_values = result_arr, mask=self.common_mask, deposit_mask = getDepositMask(self.path))
+            pred_arr, y_arr = algo.predicter(self.feature_arr)
+            show_result_map(result_values=y_arr, mask=self.common_mask, deposit_mask=getDepositMask(self.path), test_mask=test_mask_list[len(test_mask_list)-1])
         return score_list
 
     def obj_train_parallel(self, queue, args):
