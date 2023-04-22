@@ -6,9 +6,9 @@ import os
 
 
 if __name__=="__main__":
-    path_list = ['North_Idaho', 'bm_lis_go_sesrp', 'nefb_fb_hlc_cir', 'tok_lad_scsr_ahc', 'Washington']
+    path_list = ['bm_lis_go_sesrp', 'nefb_fb_hlc_cir', 'tok_lad_scsr_ahc', 'Washington','North_Idaho']
     for name in path_list:
-        path = f'Bayesian_main/data/{name}.pkl'
+        path = f'Bayesian_main/data/NovaScotia2.pkl'
 
     # Automatically decide an algorithm
     # algo_list = [rfcAlgo, svmAlgo, logiAlgo]
@@ -20,7 +20,7 @@ if __name__=="__main__":
     # Bayesian optimization process
         bo = Bayesian_optimization(
             data_path=path, 
-            algorithm=rfcAlgo, 
+            algorithm=logiAlgo, 
             mode='k',
             default_params= True
             )
