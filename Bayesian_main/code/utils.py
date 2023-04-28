@@ -18,7 +18,7 @@ The early stage data preprocess and some plot functions.
 
 """
 
-def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B', 'Ca', 'Co', 'Cr', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Y'], feature_prefix='', feature_suffix='.tif', mask='raster/mask1.tif', target_name='Au', label_path_list=['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'], label_filter=True, feature_filter=False, output_path='./data/nefb_fb_hlc_cir.pkl'):
+def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B', 'Ca', 'Co', 'Cr', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Y'], feature_prefix='', feature_suffix='.tif', mask='raster/mask1.tif', target_name='Au', label_path_list=['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'], augment=True, label_filter=True, feature_filter=False, output_path='./data/nefb_fb_hlc_cir.pkl'):
     """Preprocess the dataset from raster files and shapefiles into feature, label and mask data
 
     Args:
@@ -29,6 +29,7 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
         mask (str, optional): The path of mask raw data. Defaults to 'raster/mask1.tif'.
         target_name (str, optional): The name of target. Defaults to 'Au'.
         label_path_list (list, optional): The list of path of label raw data. Defaults to ['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'].
+        augment (bool, optional): Whether to perform data augment operations. Defaults to True.
         label_filter (bool, optional): Whether to fileter the label raw data before process. Defaults to True.
         feature_filter (bool, optional): Whether to fileter the raw features before process instead of using feature list. Defaults to False.
         output_path (str, optional): The path of output data files. Defaults to '../data/nefb_fb_hlc_cir.pkl'.
@@ -49,7 +50,7 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     # Load mask raw data and preprocess
     mask_ds = rasterio.open(data_dir+f'/{mask}')
     mask_data = mask_ds.read(1)
-    mask = mask_data != 0
+    mask = make_mask(data_dir, mask_data)
     
     # More features added and filtered 
     if feature_filter:
@@ -82,8 +83,9 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
             au_dep = deposite
         # Extract the coordinate
         label_x = au_dep.geometry.x.to_numpy()
-        label_x_list.append(label_x)
         label_y = au_dep.geometry.y.to_numpy()
+
+        label_x_list.append(label_x)
         label_y_list.append(label_y)
 
     # Preprocess label
@@ -96,16 +98,26 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     for x, y in zip(row_np, col):
         label_arr2d[x, y] = 1
     ground_label_arr = label_arr2d[mask]
+
     # Data augment
-    label_arr2d = augment_2D(label_arr2d)
-    label_arr = label_arr2d[mask]
+    plt.figure()
+    plt.subplot(2,1,1)
+    plt.imshow(label_arr2d)
     
+    if augment:
+        label_arr2d = augment_2D(label_arr2d)
+        label_arr = label_arr2d[mask]
+        plt.subplot(2,1,2)
+        plt.imshow(label_arr2d)
+    
+    # plt.savefig(f'./backup/compare_aug/{time.time()}com.png')
     if feature_filter:
         # Feature filtering by corr
         feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
         # Feature filtering by weights of RFC
         feature_arr = feature_selecter_algo(feature_arr, label_arr)
 
+    
     # Pack and save dataset
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, feature_list)
     with open(output_path, 'wb') as f:
@@ -130,7 +142,7 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
         feature_suffix='.tif', 
         mask='raster/mask.tif', 
         target_name='Au', 
-        label_path_list=['shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp', 'tok_lad_scsr_ahc_deposites.shp'], 
+        label_path_list=['shape/tok_lad_scsr_ahc_Basaltic_Cu_Au.shp','shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp', 'tok_lad_scsr_ahc_deposites.shp', 'tok_lad_scsr_ahc_Placer_Au.shp'], 
         output_path=f'{output_dir}/tok_lad_scsr_ahc.pkl')
     
     preprocess_data(
@@ -138,7 +150,7 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
         feature_list=['ba', 'ca', 'cr', 'cu', 'fe', 'la', 'mg', 'mn', 'ni', 'pb', 'sr', 'ti', 'v', 'y', 'zr'], 
         feature_prefix='Raster/Geochemistry/', 
         feature_suffix='', 
-        mask='Raster/Geochemistry/b', 
+        mask='Raster/Geochemistry/pb', 
         target_name='Au', 
         label_path_list=['Shapefiles/Au.shp'], 
         label_filter=False, 
@@ -247,6 +259,24 @@ def preprocess_data_interpolate(data_dir='Washington'):
     with open(f'data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
 
+def make_mask(data_dir, mask_data, show =False):
+
+    if 'nefb' in data_dir or 'tok' in data_dir or 'Washington' in data_dir:
+        mask = mask_data != 0
+    
+    if 'bm_lis' in data_dir:
+        mask = (mask_data < 200)
+
+    if 'North' in data_dir:
+        mask = (mask_data > -1)
+    if show:
+        plt.figure()
+        plt.imshow(mask)
+        plt.colorbar()
+        name = data_dir.replace('/','')
+        plt.savefig(f'./backup/mask_{name}.png')
+
+    return mask
 
 def augment_2D(array):
     """
@@ -320,32 +350,27 @@ def getDepositMask(name = 'Washington'):
         data_dir = 'Bayesian_main/dataset/North Idaho'
         mask_ds = rasterio.open(data_dir+'/Shapefiles/mask.tif')
         mask_data = mask_ds.read(1)
-        mask = mask_data > 0
         au = geopandas.read_file(data_dir+'/Shapefiles/Au.shp')
         
         
     if 'Washington' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/Washington/shapefile/mask1.tif')
         mask_data = mask_ds.read(1)
-        mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/Washington/shapefile/Au.shp')
     
     if 'bm_lis' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/bm_lis_go_sesrp/raster/mask.tif')
         mask_data = mask_ds.read(1)
-        mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/bm_lis_go_sesrp/shapefile/bm_lis_go_quartzveinsAu.shp')
 
     if 'nefb' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/nefb_fb_hlc_cir/raster/mask1.tif')
         mask_data = mask_ds.read(1)
-        mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/nefb_fb_hlc_cir/shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp')
     
     if 'tok_lad' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/tok_lad_scsr_ahc/raster/mask.tif')
         mask_data = mask_ds.read(1)
-        mask = mask_data == 1
         au = geopandas.read_file('Bayesian_main/dataset/tok_lad_scsr_ahc/shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp')
 
     x = au.geometry.x.to_numpy()
@@ -415,6 +440,6 @@ def show_result_map(result_values, mask, deposit_mask, test_mask = None):
 if __name__=="__main__":
     
     # For datasets preprocess, except Washington
-    preprocess_all_data()
+    preprocess_all_data(output_dir='./data_benchmark')
     # Specially for Washington
     # preprocess_data_interpolate()

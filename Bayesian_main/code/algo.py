@@ -15,7 +15,7 @@ class rfcAlgo(RandomForestClassifier):
     DEFAULT_CONTINUOUS_BOOK = {}
     DEFAULT_DISCRETE_BOOK = {'n_estimators': [20, 150], 'max_depth': [10, 50]}
     DEFAULT_ENUM_BOOK = {'criterion': ['gini', 'entropy']}
-    DEFAULT_STATIC_BOOK = {'random_state': 0} # 'random_state': 0
+    DEFAULT_STATIC_BOOK = {} # 'random_state': 0
     
     def __init__(self, params):
         super().__init__(**params)
