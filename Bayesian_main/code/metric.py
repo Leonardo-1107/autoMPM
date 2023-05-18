@@ -66,6 +66,7 @@ def get_shapley(dataset=None, data_path=None, params={}, algorithm=rfcAlgo, epoc
         shapley = shapley / feature_len
         shapley_list.append(shapley)
     
+    # output the shapley value of each features
     if out_log:
         for i in range(len(feature_name_list)):
             print(f'{feature_name_list[i]}:   \t{shapley_list[i]:+.4f}')

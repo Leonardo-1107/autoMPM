@@ -20,7 +20,7 @@ class Method_select:
         score_list = []
         for algo in self.algos:
             print(f'Evalauting {str(algo)} Model')
-            bo = Bayesian_optimization(data_path, task, algo, True)
+            bo = Bayesian_optimization(data_path, task, algo,'random', True)
             best, X, y = bo.optimize(steps=3, out_log=False, return_trace=True)
             score = np.max(y)
             score_list.append(score)

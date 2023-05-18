@@ -166,7 +166,7 @@ class ParamSpace:
             
         return np.array(sample_matrix), name_matrix
 
-    def log_head(self, name, x, y):
+    def log_head(self, name, x, y, metrics):
         """Print the table head of log
 
         Args:
@@ -175,21 +175,31 @@ class ParamSpace:
         """
 
         self.index = 0
-        now = datetime.now().strftime('%Y%m%d_%H:%M:%S')
+        now = datetime.now().strftime('%Y%m%d_%H_%M_%S')
         self.now = now
-        with open(f"Bayesian_main/run/{name.replace('.pkl',' ')}{self.now}_log.md", "w") as f:
+        with open(f"Bayesian_main/run/{name.replace('.pkl','_')}{self.now}_log.md", "w") as f:
             f.write("idx | ")
             for i in range(len(self.name_list)):
                 f.write(f"{self.name_list[i]} | ")
-            f.write("AUC Score | ")
-            f.write("F1 Score | ")
-            f.write("Precision | ")
-            f.write("AUC std | ")
-            f.write("F1 std |\n")
+            length = len(metrics) + 2
+
+            for i in range(length):
+                try:
+                    if metrics[i] == 'auc':
+                        f.write("AUC Score | ")
+                    if metrics[i] == 'f1':
+                        f.write("F1 Score | ")
+                    if metrics[i] == 'pre':
+                        f.write("Precision | ")
+                except:
+                    metric_name = metrics[i-len(metrics)].upper()
+                    f.write(f"{metric_name} std | ")
+
+            f.write("Time Cost | \n")
             f.write("--- | ")
             for i in range(len(self.name_list)):
                 f.write(f"--- | ")
-            f.write("--- | --- | --- | --- | --- |\n")
+            f.write("--- | --- | --- | --- | --- | --- | \n")
         self.log_out(name, x, y, True)
 
             
@@ -208,7 +218,7 @@ class ParamSpace:
             index = self.index
         else:
             self.index = index
-        with open(f"Bayesian_main/run/{name.replace('.pkl',' ')}{self.now}_log.md", "a") as f:
+        with open(f"Bayesian_main/run/{name.replace('.pkl','_')}{self.now}_log.md", "a") as f:
             f.write(f"{index} |")
             for x_i in x:
                 f.write(f"{bold}{x_i}{bold} | ")
