@@ -1,4 +1,5 @@
 import warnings
+import time
 from multiprocessing import Process, Queue
 
 import numpy as np
@@ -26,7 +27,7 @@ class Bayesian_optimization:
     WARNING_WORKER_HIGH = 20        # If worker is set to be higher than this, a warning will show up
     
 
-    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
+    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', metrics = ['f1','pre','auc'], default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
         """Initialize the target task, the algorithm to accomplish the task and settings of corresponding hyperparamters
 
         Args:
@@ -46,7 +47,7 @@ class Bayesian_optimization:
             path(string): The string to record the name of data estimated.
         """
         self.gaussian = GaussianProcessRegressor(kernel=ConstantKernel(cons_value, constant_value_bounds="fixed") * RBF(rbf_value, length_scale_bounds="fixed"))
-        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode)
+        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode, metrics=metrics)
         
         if default_params:
             self.param_space = ParamSpace(algorithm.DEFAULT_CONTINUOUS_BOOK, algorithm.DEFAULT_DISCRETE_BOOK, algorithm.DEFAULT_ENUM_BOOK, algorithm.DEFAULT_STATIC_BOOK)
@@ -61,6 +62,7 @@ class Bayesian_optimization:
 
         self.accompany_metric = []
         self.path = data_path
+        self.metrics = metrics
         
     def set_acq_num(self, acq_num=DEFAULT_ACQ_NUM):
         """Set the value of acq_num
@@ -227,6 +229,8 @@ class Bayesian_optimization:
         X, names = self.param_space.sample(x_num)       
         y = self.evaluate_parallel(names, x_num) 
         # y = np.array([self.objective(x) for x in X]).reshape(-1,1)
+        if isinstance(y, list):
+            y = y[0]
         self.gaussian.fit(X, y)
     
         return X, y, names
@@ -244,6 +248,7 @@ class Bayesian_optimization:
         Returns:
             Iterable: The best configuration
         """
+        start_time = time.time()
         X, y, names = self.initialize(x_num)
         
         if early_stop == 0:
@@ -255,14 +260,15 @@ class Bayesian_optimization:
         y_best = y[best]
         name_best = names[best]
         
-        
         # Print the best sample in initialized ones
         if out_log:
+
+            now = time.time()
             if len(self.accompany_metric) >= 0:    
-                self.param_space.log_head(self.path.replace('Bayesian_main/data/', '') ,name_best, [y_best] + self.accompany_metric)
+                self.param_space.log_head(self.path.replace('Bayesian_main/data/', '') ,name_best, [y_best] + self.accompany_metric + [now - start_time], self.metrics)
             else:
-                self.param_space.log_head(self.path.replace('Bayesian_main/data/', '') ,name_best, y_best)
-                
+                self.param_space.log_head(self.path.replace('Bayesian_main/data/', '') ,name_best, y_best, self.metrics)
+                            
         for _ in range(steps):
             x_sample, name = self.opt_acquisition(X)
             if self.worker > 1:
@@ -289,9 +295,10 @@ class Bayesian_optimization:
             
             # Print the result of the current epoch
             if out_log:
+                now = time.time()
                 if len(self.accompany_metric) > 0:
                     y_ground = [y_ground] + self.accompany_metric
-                self.param_space.log_out(self.path.replace('Bayesian_main/data/', ''), name, y_ground, flag)
+                self.param_space.log_out(self.path.replace('Bayesian_main/data/', ''), name, y_ground + [now - start_time], flag)
             
             # Early stop
             if not flag:

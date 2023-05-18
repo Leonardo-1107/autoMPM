@@ -6,8 +6,8 @@ from multiprocessing import Process, Queue
 import numpy as np
 from algo import rfcAlgo, mlpAlgo
 from sklearn.cluster import KMeans
-from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, plot_roc_curve, accuracy_score
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, accuracy_score
+from sklearn.model_selection import KFold
 
 from utils import show_result_map, getDepositMask
 name = 'Bayesian_main/data/NovaScotia2.pkl'
@@ -18,7 +18,7 @@ class Model:
     DEFAULT_TEST_CLUSTERS = 4
     WARNING_FIDELITY_HIGH = 20
     
-    def __init__(self, data_path, fidelity=3, test_clusters=4, algorithm=rfcAlgo, mode='random'):
+    def __init__(self, data_path, fidelity=3, test_clusters=4, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc']):
         """Initialize the input data, algorithm for the target task, evaluation fidelity and test clusters
 
         Args:
@@ -26,6 +26,7 @@ class Model:
             fidelity (int, optional): The number repeated trials for evaluation. Defaults to 3.
             test_clusters (int, optional): The number of clusters in data split. Defaults to 4.
             algorithm (_type_, optional): The algorithm used to accomplish the target task. Defaults to rfcAlgo.
+            metrics: (list, optional): The metrics used to judege the performance.
         """
         with open(data_path, 'rb') as f:
             feature_arr, total_label, common_mask, feature_name_list = pickle.load(f)
@@ -40,6 +41,7 @@ class Model:
         self.path = data_path
         self.mode = mode
         self.test_index = 0
+        self.metrics = metrics
         return
        
     def set_test_clusters(self, test_clusters=DEFAULT_TEST_CLUSTERS):
@@ -67,7 +69,7 @@ class Model:
             array: The cluster id that each sample belongs to
         """
         coord = np.concatenate([x, y], axis=1)
-        cl = KMeans(n_clusters=cluster, random_state=0).fit(coord)
+        cl = KMeans(n_clusters=cluster).fit(coord)
         cll = cl.labels_
         
         return cll
@@ -172,52 +174,56 @@ class Model:
         
         return tmpt, dataset_list
     
-    def random_spilt(self, rate =0.2, modify =False):
-        """Split the dataset into train set and test set, repeated for the number of clusters
+    def random_spilt(self, modify =False):
+        """Split the dataset into train set and test set, and apply K-fold Cross-validation.
 
         Args:
-            rate: the ratio of the size of train and test dataset
+            modify (bool, optional): Undersample if True. Defaults to False.
 
         Returns:
-            the spilt result with the Same form of modules in skit-learn
+            list: splited dataset list
         """
         
         feature = self.feature_arr
         total_label = self.total_label_arr
         ground_label = total_label[0]
         aug_label = total_label[1]
-        index = np.arange(len(aug_label))
         
-        train_index, test_index = train_test_split(
-            index, 
-            test_size=rate,
-            shuffle=True)
-
-        X_train_fold, X_test_fold, y_train_fold, y_test_fold = [],[],[],[]
-        for i in train_index:
-            X_train_fold.append(feature[i])
-            y_train_fold.append(aug_label[i])
-        
-        for i in test_index:
-            X_test_fold.append(feature[i])
-            y_test_fold.append(ground_label[i])
+        dataset_list = []
+        kf = KFold(n_splits=self.test_clusters, shuffle=True)
+        for train_index , test_index in kf.split(feature): 
             
-        X_train_fold, X_test_fold, y_train_fold, y_test_fold = np.array(X_train_fold), np.array(X_test_fold), np.array(y_train_fold), np.array(y_test_fold)
-        
-        if modify:
+            X_train_fold, X_test_fold, y_train_fold, y_test_fold = [],[],[],[]
+            for i in train_index:
+                X_train_fold.append(feature[i])
+                y_train_fold.append(aug_label[i])
+            
+            for i in test_index:
+                X_test_fold.append(feature[i])
+                y_test_fold.append(ground_label[i])
                 
-                true_num = y_train_fold.sum()
-                index = np.arange(len(y_train_fold))
-                true_train = index[y_train_fold == 1]
-                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num]
-                train = np.concatenate([true_train, false_train])
-                X_train_fold = X_train_fold[train]
-                y_train_fold = y_train_fold[train]
-                
-        return X_train_fold, X_test_fold, y_train_fold, y_test_fold
+            X_train_fold, X_test_fold, y_train_fold, y_test_fold = np.array(X_train_fold), np.array(X_test_fold), np.array(y_train_fold), np.array(y_test_fold)
+            
+            if y_test_fold.sum() == 0: 
+                continue
+
+            if modify:
+                    
+                    true_num = y_train_fold.sum()
+                    index = np.arange(len(y_train_fold))
+                    true_train = index[y_train_fold == 1]
+                    false_train = np.random.permutation(index[y_train_fold == 0])[:true_num]
+                    train = np.concatenate([true_train, false_train])
+                    X_train_fold = X_train_fold[train]
+                    y_train_fold = y_train_fold[train]
+
+            dataset = (X_train_fold, y_train_fold, X_test_fold, y_test_fold)
+            dataset_list.append(dataset)
+            
+        return dataset_list
     
     
-    def train(self, params,  metrics=['auc','f1','pre'], test_mask=None, modify=False):
+    def train(self, params, test_mask=None, modify=False):
         """Train a random forest with test-set as a rectangle
 
         Args:
@@ -229,7 +235,7 @@ class Model:
         Returns:
             score_list (list): Scores for each metric
         """
-
+        metrics = self.metrics
         if not isinstance(metrics, list):
             metrics = [metrics]
         metric_list = []
@@ -257,18 +263,16 @@ class Model:
             
         score_list = []
         if self.mode  == 'random':
-            # N fold-cross
-            for i in range(self.test_clusters):
-                
-                X_train_fold, X_test_fold, y_train_fold, y_test_fold= self.random_spilt(rate=1/self.test_clusters, modify=modify) 
+            dataset_list = self.random_spilt(modify=modify)
+            for dataset in dataset_list:
+                X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
-                
+            
                 pred_arr, y_arr = algo.predicter(X_test_fold)
                 scores = []
                 for metric in metric_list:
                     if metric == f1_score or metric == precision_score:
-                        # Only make sense when data augment deployed
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score) 
                     else:
@@ -280,7 +284,6 @@ class Model:
                 score_list.append(scores)
 
         else: 
-            # OoD by K-means
             test_mask_list, dataset_list = self.dataset_split(test_mask, modify=modify)
             for dataset in dataset_list:
                 X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
@@ -344,7 +347,7 @@ class Model:
             axis=0
             )
         std_arr = np.std(score_list, axis=1)
-        auc_std, f_std = np.mean(std_arr[:,0]), np.mean(std_arr[:,1])
-        y = list(y) + [auc_std, f_std]
+        score1_std, score2_std = np.mean(std_arr[:,0]), np.mean(std_arr[:,1])
+        y = list(y) + [score1_std, score2_std]
               
         return y
