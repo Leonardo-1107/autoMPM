@@ -19,8 +19,9 @@ class rfcAlgo(RandomForestClassifier):
     
     def __init__(self, params):
         super().__init__(**params)
-        
-    def predicter(self, X, save_weight = True):
+        self.params = params
+
+    def predicter(self, X, save_weight = False):
         # Output the pred layer and the proba layer simultaneously
         if save_weight:
             np.save('Bayesian_main/weights.npy', self.feature_importances_)
@@ -41,6 +42,7 @@ class logiAlgo(LogisticRegression):
     
     def __init__(self, params):
         super().__init__(**params)
+        self.params = params
     
     def predicter(self, X):   
         pred = self.predict(X)
@@ -57,7 +59,8 @@ class mlpAlgo(MLPClassifier):
     
     def __init__(self, params):
         super().__init__(**params)
-        
+        self.params = params
+
     def predicter(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
@@ -73,6 +76,7 @@ class svmAlgo(SVC):
 
     def __init__(self, params):
         super().__init__(**params)
+        self.params = params
         
     def predicter(self, X):
         pred = self.predict(X)
