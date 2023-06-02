@@ -8,10 +8,11 @@ import heapq
 import scipy.stats as ss
 from scipy.interpolate import interp2d
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc
 import pykrige
 import time
 import os
-
+import sys
 
 """
 The early stage data preprocess and some plot functions.
@@ -97,18 +98,14 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     label_arr2d = np.zeros_like(mask_data)
     for x, y in zip(row_np, col):
         label_arr2d[x, y] = 1
-    ground_label_arr = label_arr2d[mask]
 
-    # Data augment
-    plt.figure()
-    plt.subplot(2,1,1)
-    plt.imshow(label_arr2d)
+    deposite_mask = label_arr2d
+    ground_label_arr = label_arr2d[mask]
     
+    # Data augment
     if augment:
         label_arr2d = augment_2D(label_arr2d)
         label_arr = label_arr2d[mask]
-        plt.subplot(2,1,2)
-        plt.imshow(label_arr2d)
     
     # plt.savefig(f'./backup/compare_aug/{time.time()}com.png')
     if feature_filter:
@@ -119,21 +116,23 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
 
     
     # Pack and save dataset
-    dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, feature_list)
+    dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, deposite_mask)
     with open(output_path, 'wb') as f:
         pickle.dump(dataset, f)
 
 
-def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
+def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='Au', label_filter=True):
     preprocess_data(
         data_dir=f'{data_dir}/nefb_fb_hlc_cir', 
         feature_list=['As', 'B', 'Ca', 'Co', 'Cr', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Y'], 
         feature_prefix='raster/', 
         feature_suffix='.tif', 
         mask='raster/mask1.tif', 
-        target_name='Au', 
+        target_name=target_name, 
         label_path_list=['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'], 
-        output_path=f'{output_dir}/nefb_fb_hlc_cir.pkl')
+        output_path=f'{output_dir}/nefb_fb_hlc_cir.pkl',
+        label_filter=label_filter
+        )
     
     preprocess_data(
         data_dir=f'{data_dir}/tok_lad_scsr_ahc', 
@@ -141,9 +140,11 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
         feature_prefix='raster/', 
         feature_suffix='.tif', 
         mask='raster/mask.tif', 
-        target_name='Au', 
+        target_name=target_name, 
         label_path_list=['shape/tok_lad_scsr_ahc_Basaltic_Cu_Au.shp','shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp', 'tok_lad_scsr_ahc_deposites.shp', 'tok_lad_scsr_ahc_Placer_Au.shp'], 
-        output_path=f'{output_dir}/tok_lad_scsr_ahc.pkl')
+        output_path=f'{output_dir}/tok_lad_scsr_ahc.pkl',
+        label_filter=label_filter
+        )
     
     preprocess_data(
         data_dir=f'{data_dir}/North Idaho', 
@@ -151,10 +152,11 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
         feature_prefix='Raster/Geochemistry/', 
         feature_suffix='', 
         mask='Raster/Geochemistry/pb', 
-        target_name='Au', 
-        label_path_list=['Shapefiles/Au.shp'], 
-        label_filter=False, 
-        output_path=f'{output_dir}/North_Idaho.pkl')
+        target_name=target_name, 
+        label_path_list=['Shapefiles/Au.shp'], #, 'Shapefiles/mineral_deposit.shp'
+        output_path=f'{output_dir}/North_Idaho.pkl',
+        label_filter=False
+        )
     
     preprocess_data(
         data_dir=f'{data_dir}/bm_lis_go_sesrp', 
@@ -162,17 +164,21 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data'):
         feature_prefix='raster/', 
         feature_suffix='', 
         mask='raster/mask.tif', 
-        target_name='Au', 
+        target_name=target_name, 
         label_path_list=['shapefile/bm_lis_go_quartzveinsAu.shp'], 
-        output_path=f'{output_dir}/bm_lis_go_sesrp.pkl')
+        output_path=f'{output_dir}/bm_lis_go_sesrp.pkl',
+        label_filter=label_filter
+        )
     
     
-def preprocess_data_interpolate(data_dir='Washington'):
+def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
     """
     Convert point data to raster data by interpolation
 
     Args:
         data_dir (str, optional): The directory of raw data. 
+        augment (bool, optional): Whether to perform data augment operations. Defaults to True.
+
 
     Returns:
         Array: The array of samples' feature
@@ -195,9 +201,11 @@ def preprocess_data_interpolate(data_dir='Washington'):
     label_arr2d = np.zeros_like(mask_data)
     for x, y in zip(row_np, col):
         label_arr2d[x, y] = 1
-    # Data augment
+    
+    deposite_mask = label_arr2d
     ground_label_arr = label_arr2d[mask]
-    label_arr2d = augment_2D(label_arr2d)
+    if augment:
+        label_arr2d = augment_2D(label_arr2d)
     label_arr = label_arr2d[mask]
 
     # Feature filtering by corr
@@ -255,8 +263,8 @@ def preprocess_data_interpolate(data_dir='Washington'):
     for idx in range(len(feature_list)):
         feature_arr[:,idx] = feature_arr2d_dict[feature_list[idx]][mask]
      
-    dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, feature_list)
-    with open(f'data/Washington_{method}.pkl', 'wb') as f:
+    dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, deposite_mask)
+    with open(f'./data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
 
 def make_mask(data_dir, mask_data, show =False):
@@ -371,7 +379,8 @@ def getDepositMask(name = 'Washington'):
     if 'tok_lad' in name:
         mask_ds = rasterio.open('Bayesian_main/dataset/tok_lad_scsr_ahc/raster/mask.tif')
         mask_data = mask_ds.read(1)
-        au = geopandas.read_file('Bayesian_main/dataset/tok_lad_scsr_ahc/shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp')
+        au = geopandas.read_file('Bayesian_main/dataset/tok_lad_scsr_ahc/tok_lad_scsr_ahc_deposites.shp')
+        #  Bayesian_main/dataset/tok_lad_scsr_ahc/shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp
 
     x = au.geometry.x.to_numpy()
     y = au.geometry.y.to_numpy()
@@ -387,22 +396,43 @@ def getDepositMask(name = 'Washington'):
     return label_arr2d
 
 def plot_roc(fpr, tpr, index, scat=False, save=True):
-    plt.figure()
-    plt.plot(fpr, tpr, color="darkorange",)
+    """
+        plot ROC curve
+    """
+    # plt.figure()
+    roc_auc = auc(fpr, tpr)
+    plt.plot(fpr, tpr, label='ROC area = {0:.2f}'.format(roc_auc), lw=2)
     plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
     if scat:
         plt.scatter(fpr, tpr)
     plt.title("ROC curve for mineral prediction")
     plt.xlabel("False positive rate")
     plt.ylabel("True positive rate")
+
     if save:
-        plt.savefig(f'../pictures/{index}_roc.png')
+        plt.grid(alpha=0.8)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f'Bayesian_main/run/{index}_roc.png')
     else:
         plt.show()    
 
+def plot_PR(y_test_fold, y_arr):
+    """
+        plot Precision-Recall curve
+    """
+    prec, recall, _ = precision_recall_curve(y_test_fold, y_arr)
+    plt.plot(recall, prec)
+
+    plt.grid(alpha=0.8)
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.tight_layout()
+    plt.savefig('Bayesian_main/run/precision-recall.png', dpi=300)
+
 def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
 
-    plt.figure(dpi=150)
+    plt.figure(dpi=300)
     x, y = common_mask.nonzero()
     positive_x = x[label_arr.astype(bool)]
     positive_y = y[label_arr.astype(bool)]
@@ -417,7 +447,9 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
         plt.savefig(save_path)
 
 def show_result_map(result_values, mask, deposit_mask, test_mask = None):
-    
+    # if test_mask == None:
+    #     test_mask = mask
+    plt.figure(dpi=300)
     validYArray, validXArray = np.where(mask > 0)
     dep_YArray, dep_XArray = np.where(np.logical_and(deposit_mask, test_mask) == 1)
     result_array = np.zeros_like(deposit_mask, dtype = "float")
@@ -429,10 +461,12 @@ def show_result_map(result_values, mask, deposit_mask, test_mask = None):
     
     result_array[~mask] = np.nan
     
+    # pylab.imshow(new_mask, cmap='spring')
     pylab.imshow(result_array, cmap='cividis')
     pylab.colorbar(label="0/1", orientation="vertical")
 
-    pylab.scatter(dep_XArray, dep_YArray, c='r', s=6, alpha=0.7)
+    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5, alpha=0.8, label = "Target")
+    plt.legend(fontsize = 14)
     pylab.savefig('result_map.png')
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
     print(f"\t--- {t} New feature map Saved\n")
@@ -440,6 +474,6 @@ def show_result_map(result_values, mask, deposit_mask, test_mask = None):
 if __name__=="__main__":
     
     # For datasets preprocess, except Washington
-    preprocess_all_data(output_dir='./data_benchmark')
+    preprocess_all_data(output_dir='./data_benchmark', target_name='Au', label_filter=True)
     # Specially for Washington
     # preprocess_data_interpolate()
