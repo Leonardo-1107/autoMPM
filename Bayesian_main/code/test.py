@@ -22,12 +22,12 @@ if __name__=="__main__":
         bo = Bayesian_optimization(
             data_path=path, 
             algorithm=rfcAlgo, 
-            mode='random',
-            metrics=['f1','pre','auc'],
+            mode='k',
+            metrics=['auc','f1','pre'],
             default_params= True
             )
         
-        x_best = bo.optimize(100)
+        x_best = bo.optimize(40)
         
         # for rfcAlgo estimation
         # print(f'Best   n_estimators: {x_best[0]}, max_depth: {x_best[1]}, criterion: {x_best[2]}')
