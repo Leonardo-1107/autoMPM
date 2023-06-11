@@ -9,7 +9,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, accuracy_score
 from sklearn.model_selection import KFold
 
-from utils import show_result_map, getDepositMask
+from utils import show_result_map
 name = 'Bayesian_main/data/NovaScotia2.pkl'
 
 class Model:
@@ -18,7 +18,7 @@ class Model:
     DEFAULT_TEST_CLUSTERS = 4
     WARNING_FIDELITY_HIGH = 20
     
-    def __init__(self, data_path, fidelity=3, test_clusters=4, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc']):
+    def __init__(self, data_path, fidelity=3, test_clusters=6, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc']):
         """Initialize the input data, algorithm for the target task, evaluation fidelity and test clusters
 
         Args:
@@ -29,13 +29,14 @@ class Model:
             metrics: (list, optional): The metrics used to judege the performance.
         """
         with open(data_path, 'rb') as f:
-            feature_arr, total_label, common_mask, feature_name_list = pickle.load(f)
+            feature_arr, total_label, common_mask, deposite_mask = pickle.load(f)
         self.set_fidelity(fidelity)
         self.set_test_clusters(test_clusters)
         self.feature_arr = feature_arr
         self.total_label_arr = total_label.astype(int)
         self.label_arr = self.total_label_arr[0]
         self.common_mask = common_mask
+        self.deposite_mask = deposite_mask
         self.height, self.width = common_mask.shape
         self.algorithm = algorithm
         self.path = data_path
@@ -305,7 +306,7 @@ class Model:
                 score_list.append(scores)
 
             pred_arr, y_arr = algo.predicter(self.feature_arr)
-            show_result_map(result_values=y_arr, mask=self.common_mask, deposit_mask=getDepositMask(self.path), test_mask=test_mask_list[len(test_mask_list)-1])
+            show_result_map(result_values=y_arr, mask=self.common_mask, deposit_mask=self.deposite_mask, test_mask=test_mask_list[len(test_mask_list)-1])
         return score_list
 
     def obj_train_parallel(self, queue, args):
