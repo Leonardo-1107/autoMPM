@@ -8,7 +8,7 @@ import heapq
 import scipy.stats as ss
 from scipy.interpolate import interp2d
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc
+from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, confusion_matrix
 import pykrige
 import time
 import os
@@ -114,7 +114,6 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
         # Feature filtering by weights of RFC
         feature_arr = feature_selecter_algo(feature_arr, label_arr)
 
-    
     # Pack and save dataset
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, deposite_mask)
     with open(output_path, 'wb') as f:
@@ -267,6 +266,38 @@ def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
     with open(f'./data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
 
+def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mask_dir='Mask.npy', label_path_list=['Au.npy'], augment=True, output_path = './data_benchmark/Nova.pkl'):
+    # Process the NovaScotia2 Data
+    feature_list = ['Anticline_Buffer', 'Anticline_Buffer', 'As', 'Li', 'Pb', 'F', 'Cu', 'W', 'Zn']
+    feature_dict = {}
+    for feature in feature_list:
+        rst = np.load(data_dir+f'/{feature_prefix}{feature}{feature_suffix}')
+        feature_dict[feature] = rst
+        
+    # Load mask data and preprocess
+    mask = np.load(data_dir+ '/' +mask_dir).astype(np.int64)
+
+    # Preprocess features
+    feature_arr = np.zeros((mask.sum(), len(feature_list)))
+    for i, feature in enumerate(feature_list):
+        feature_arr[:, i] = feature_dict[feature]
+        
+    # Load the target ID
+    label_arr = np.zeros(shape=(feature_arr.shape[0], ))
+    for path in label_path_list:
+        depositMask = np.load(data_dir + '/' + path)
+        ground_label_arr = depositMask[mask]
+        label_arr = ground_label_arr
+
+        if augment:
+            label_arr2d = augment_2D(depositMask) 
+            label_arr = label_arr2d[mask]
+
+    dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, depositMask)
+    with open(output_path, 'wb') as f:
+        pickle.dump(dataset, f)
+
+
 def make_mask(data_dir, mask_data, show =False):
 
     if 'nefb' in data_dir or 'tok' in data_dir or 'Washington' in data_dir:
@@ -399,7 +430,6 @@ def plot_roc(fpr, tpr, index, scat=False, save=True):
     """
         plot ROC curve
     """
-    # plt.figure()
     roc_auc = auc(fpr, tpr)
     plt.plot(fpr, tpr, label='ROC area = {0:.2f}'.format(roc_auc), lw=2)
     plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
@@ -430,8 +460,31 @@ def plot_PR(y_test_fold, y_arr):
     plt.tight_layout()
     plt.savefig('Bayesian_main/run/precision-recall.png', dpi=300)
 
-def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
+def get_confusion_matrix(cfm_list, clusters):
+    """
+        plot the confusion matrix
+    """
+    cols = int((clusters+0.5)/2)
+    fig, axes = plt.subplots(nrows=2, ncols=cols)
+    for i, plt_image in enumerate(cfm_list):  
+        if i < cols: 
+            index1 = 0
+            index2 = i
+        else:
+            index1 = 1
+            index2 = i-cols  
 
+        axes[index1, index2].matshow(plt_image, cmap=plt.get_cmap('Reds'), alpha=0.5)
+        axes[index1, index2].set_title(f"index {i}")
+
+    fig.tight_layout()
+    plt.savefig('./Bayesian_main/run/cfm.png')
+
+
+def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
+    """
+        Plot to demonstrate data split
+    """
     plt.figure(dpi=300)
     x, y = common_mask.nonzero()
     positive_x = x[label_arr.astype(bool)]
@@ -445,35 +498,36 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
     
     if save_path is not None:
         plt.savefig(save_path)
+    else:
+        plt.savefig('Bayesian_main/run/spilt_standard.png')
 
-def show_result_map(result_values, mask, deposit_mask, test_mask = None):
+def show_result_map(result_values, mask, deposit_mask, test_mask = None, index = 0, clusters = 4):
     # if test_mask == None:
     #     test_mask = mask
-    plt.figure(dpi=300)
+    cols = int((clusters+0.5)/2)
+    
+    if index == 1:
+        plt.figure(dpi=600)
+        plt.subplots(2, cols, figsize=(15, 15), sharex=True, sharey=False)
     validYArray, validXArray = np.where(mask > 0)
     dep_YArray, dep_XArray = np.where(np.logical_and(deposit_mask, test_mask) == 1)
     result_array = np.zeros_like(deposit_mask, dtype = "float")
 
-    
     for i in range(len(validYArray)):
         if test_mask[validYArray[i], validXArray[i]] > 0:
             result_array[validYArray[i], validXArray[i]] = result_values[i]*100
     
     result_array[~mask] = np.nan
-    
+    plt.subplot(2, cols, index)
     # pylab.imshow(new_mask, cmap='spring')
     pylab.imshow(result_array, cmap='cividis')
-    pylab.colorbar(label="0/1", orientation="vertical")
+    # pylab.colorbar(label="0/1", orientation="vertical")
 
-    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5, alpha=0.8, label = "Target")
+    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5, alpha=0.8, label = f"Target, index {index}")
     plt.legend(fontsize = 14)
+    plt.tight_layout()
     pylab.savefig('result_map.png')
+
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
     print(f"\t--- {t} New feature map Saved\n")
 
-if __name__=="__main__":
-    
-    # For datasets preprocess, except Washington
-    preprocess_all_data(output_dir='./data_benchmark', target_name='Au', label_filter=True)
-    # Specially for Washington
-    # preprocess_data_interpolate()
