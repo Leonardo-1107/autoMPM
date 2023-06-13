@@ -447,35 +447,47 @@ def plot_roc(fpr, tpr, index, scat=False, save=True):
     else:
         plt.show()    
 
-def plot_PR(y_test_fold, y_arr):
+
+def plot_PR(y_test_fold, y_arr, index):
     """
-        plot Precision-Recall curve
+    plot Precision-Recall curve
     """
     prec, recall, _ = precision_recall_curve(y_test_fold, y_arr)
-    plt.plot(recall, prec)
-
+    f1_scores = 2 * (prec * recall) / (prec + recall)
+    max_f1_score = np.max(f1_scores)
+    max_f1_score_index = np.argmax(f1_scores)
+    plt.plot(recall, prec, label = f'Max F1: {max_f1_score:.2f}     spilt set: {index}')
+    plt.scatter(recall[max_f1_score_index], prec[max_f1_score_index], c='red', marker='o')
+    plt.legend()
     plt.grid(alpha=0.8)
     plt.xlabel("Recall")
     plt.ylabel("Precision")
     plt.tight_layout()
+    
+    # Set a different background color
+    # ax = plt.gca()
+    # ax.set_facecolor('lightgray')
+
     plt.savefig('Bayesian_main/run/precision-recall.png', dpi=300)
 
 def get_confusion_matrix(cfm_list, clusters):
     """
-        plot the confusion matrix
+    plot the confusion matrix
     """
-    cols = int((clusters+0.5)/2)
-    fig, axes = plt.subplots(nrows=2, ncols=cols)
-    for i, plt_image in enumerate(cfm_list):  
-        if i < cols: 
-            index1 = 0
-            index2 = i
-        else:
-            index1 = 1
-            index2 = i-cols  
+    cols = clusters
+    fig, axes = plt.subplots(nrows=1, ncols=cols, figsize=(10, 5))
+    for i, plt_image in enumerate(cfm_list):
+        index2 = i
+        axes[index2].matshow(plt_image, cmap=plt.get_cmap('Blues'), alpha=0.5)
+        axes[index2].set_title(f"split set {i}")
 
-        axes[index1, index2].matshow(plt_image, cmap=plt.get_cmap('Reds'), alpha=0.5)
-        axes[index1, index2].set_title(f"index {i}")
+        # Add labels to each cell
+        for j in range(plt_image.shape[0]):
+            for k in range(plt_image.shape[1]):
+                text = plt_image[j, k]
+                axes[index2].annotate(text, xy=(k, j), ha='center', va='center', 
+                                      color='black',  weight='heavy', 
+                                      bbox=dict(boxstyle='round,pad=0.5', fc='yellow', ec='k', lw=1.5, alpha=0.8))
 
     fig.tight_layout()
     plt.savefig('./Bayesian_main/run/cfm.png')
@@ -501,33 +513,43 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
     else:
         plt.savefig('Bayesian_main/run/spilt_standard.png')
 
-def show_result_map(result_values, mask, deposit_mask, test_mask = None, index = 0, clusters = 4):
-    # if test_mask == None:
-    #     test_mask = mask
-    cols = int((clusters+0.5)/2)
-    
+def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, clusters=4):
+    cols = int((clusters + 0.5) / 2)
+
     if index == 1:
         plt.figure(dpi=600)
         plt.subplots(2, cols, figsize=(15, 15), sharex=True, sharey=False)
+
     validYArray, validXArray = np.where(mask > 0)
     dep_YArray, dep_XArray = np.where(np.logical_and(deposit_mask, test_mask) == 1)
-    result_array = np.zeros_like(deposit_mask, dtype = "float")
+    result_array = np.zeros_like(deposit_mask, dtype="float")
 
     for i in range(len(validYArray)):
         if test_mask[validYArray[i], validXArray[i]] > 0:
-            result_array[validYArray[i], validXArray[i]] = result_values[i]*100
-    
+            result_array[validYArray[i], validXArray[i]] = result_values[i] * 100
+
     result_array[~mask] = np.nan
+
     plt.subplot(2, cols, index)
-    # pylab.imshow(new_mask, cmap='spring')
-    pylab.imshow(result_array, cmap='cividis')
-    # pylab.colorbar(label="0/1", orientation="vertical")
+    plt.imshow(result_array, cmap='viridis')
+    plt.rcParams['font.size'] = 14
 
-    pylab.scatter(dep_XArray, dep_YArray, c='r', s=5, alpha=0.8, label = f"Target, index {index}")
-    plt.legend(fontsize = 14)
+    # Plot target points with improved style
+    plt.scatter(dep_XArray, dep_YArray, c='red', s=10, alpha=0.8, label=f"Target (split {index})")
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    # plt.title('Result Map')
+
+    # Add a legend
+    plt.legend(fontsize=14)
+    cbar = plt.colorbar(shrink=0.5, aspect=30, pad=0.02)
+    cbar.ax.set_ylabel('Prediction', fontsize=12)
+
+    # Adjust subplot spacing
     plt.tight_layout()
-    pylab.savefig('result_map.png')
+    plt.gca().set_facecolor('lightgray')
 
+    # Save the figure
+    plt.savefig('result_map.png', dpi=300)
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
     print(f"\t--- {t} New feature map Saved\n")
-
