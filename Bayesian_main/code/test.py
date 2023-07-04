@@ -6,10 +6,12 @@ import os
 
 
 if __name__=="__main__":
-    path_list = ['bm_lis_go_sesrp', 'nefb_fb_hlc_cir', 'tok_lad_scsr_ahc', 'North_Idaho', 'NovaScotia2', 'Washington']
+    data_dir = 'Bayesian_main/data_benchmark/common'
+    path_list = os.listdir(data_dir)
     for name in path_list:
-        # name = 'NovaScotia2'
-        path = f'Bayesian_main/data/{name}.pkl'
+        
+        path = data_dir + '/' + name
+        print(path)
 
         #Automatically decide an algorithm
         # algo_list = [rfcAlgo, svmAlgo, logiAlgo]
@@ -22,13 +24,10 @@ if __name__=="__main__":
         bo = Bayesian_optimization(
             data_path=path, 
             algorithm=rfcAlgo, 
-            mode='k',
-            metrics=['auc','f1','pre'],
+            mode='radom',
+            metrics=['auc', 'f1', 'pre'],
             default_params= True
             )
         
-        x_best = bo.optimize(40)
-        
-        # for rfcAlgo estimation
-        # print(f'Best   n_estimators: {x_best[0]}, max_depth: {x_best[1]}, criterion: {x_best[2]}')
+        x_best = bo.optimize(20)
         
