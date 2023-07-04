@@ -8,7 +8,7 @@ import heapq
 import scipy.stats as ss
 from scipy.interpolate import interp2d
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, confusion_matrix
+from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, roc_curve
 import pykrige
 import time
 import os
@@ -140,7 +140,7 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='
         feature_suffix='.tif', 
         mask='raster/mask.tif', 
         target_name=target_name, 
-        label_path_list=['shape/tok_lad_scsr_ahc_Basaltic_Cu_Au.shp','shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp', 'tok_lad_scsr_ahc_deposites.shp', 'tok_lad_scsr_ahc_Placer_Au.shp'], 
+        label_path_list=['shape/tok_lad_scsr_ahc_Basaltic_Cu_Au.shp','shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp', 'tok_lad_scsr_ahc_Placer_Au.shp'], 
         output_path=f'{output_dir}/tok_lad_scsr_ahc.pkl',
         label_filter=label_filter
         )
@@ -266,7 +266,7 @@ def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
     with open(f'./data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
 
-def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mask_dir='Mask.npy', label_path_list=['Au.npy'], augment=True, output_path = './data_benchmark/Nova.pkl'):
+def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mask_dir='Mask.npy', label_path_list=['Target.npy'], augment=True, output_path = './data_benchmark/Nova.pkl'):
     # Process the NovaScotia2 Data
     feature_list = ['Anticline_Buffer', 'Anticline_Buffer', 'As', 'Li', 'Pb', 'F', 'Cu', 'W', 'Zn']
     feature_dict = {}
@@ -276,16 +276,18 @@ def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mas
         
     # Load mask data and preprocess
     mask = np.load(data_dir+ '/' +mask_dir).astype(np.int64)
+    mask = make_mask(data_dir, mask_data=mask, show=True)
 
     # Preprocess features
     feature_arr = np.zeros((mask.sum(), len(feature_list)))
     for i, feature in enumerate(feature_list):
-        feature_arr[:, i] = feature_dict[feature]
-        
+        feature_arr[:, i] = feature_dict[feature][mask]
+    
     # Load the target ID
     label_arr = np.zeros(shape=(feature_arr.shape[0], ))
+    
     for path in label_path_list:
-        depositMask = np.load(data_dir + '/' + path)
+        depositMask = (np.load(data_dir + '/' + path) > 0 )
         ground_label_arr = depositMask[mask]
         label_arr = ground_label_arr
 
@@ -308,6 +310,9 @@ def make_mask(data_dir, mask_data, show =False):
 
     if 'North' in data_dir:
         mask = (mask_data > -1)
+    
+    else:
+        mask = mask_data != 0
     if show:
         plt.figure()
         plt.imshow(mask)
@@ -376,6 +381,7 @@ def feature_selecter_algo(feature_arr, label_arr, n = 20):
 
 def getDepositMask(name = 'Washington'):
     """
+    Warning: will no longer be used
     Return the mineral sites when drawing the feature map
     """
 
@@ -431,7 +437,7 @@ def plot_roc(fpr, tpr, index, scat=False, save=True):
         plot ROC curve
     """
     roc_auc = auc(fpr, tpr)
-    plt.plot(fpr, tpr, label='ROC area = {0:.2f}'.format(roc_auc), lw=2)
+    plt.plot(fpr, tpr, label=f'split set {index}, ROC area = {roc_auc:.2f}', lw=2)
     plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
     if scat:
         plt.scatter(fpr, tpr)
@@ -443,7 +449,7 @@ def plot_roc(fpr, tpr, index, scat=False, save=True):
         plt.grid(alpha=0.8)
         plt.legend()
         plt.tight_layout()
-        plt.savefig(f'Bayesian_main/run/{index}_roc.png')
+        plt.savefig(f'Bayesian_main/run/figs/roc.png')
     else:
         plt.show()    
 
@@ -453,22 +459,33 @@ def plot_PR(y_test_fold, y_arr, index):
     plot Precision-Recall curve
     """
     prec, recall, _ = precision_recall_curve(y_test_fold, y_arr)
-    f1_scores = 2 * (prec * recall) / (prec + recall)
+    non_zero_indices = np.logical_and(prec != 0, recall != 0)
+    f1_scores = 2 * (prec[non_zero_indices] * recall[non_zero_indices]) / (prec[non_zero_indices] + recall[non_zero_indices])
     max_f1_score = np.max(f1_scores)
     max_f1_score_index = np.argmax(f1_scores)
-    plt.plot(recall, prec, label = f'Max F1: {max_f1_score:.2f}     spilt set: {index}')
+    plt.plot(recall, prec, label = f'split set: {index}, Max F1: {max_f1_score:.2f}')
     plt.scatter(recall[max_f1_score_index], prec[max_f1_score_index], c='red', marker='o')
     plt.legend()
     plt.grid(alpha=0.8)
     plt.xlabel("Recall")
     plt.ylabel("Precision")
+    plt.title("PR curve for mineral prediction")
     plt.tight_layout()
-    
-    # Set a different background color
-    # ax = plt.gca()
-    # ax.set_facecolor('lightgray')
 
-    plt.savefig('Bayesian_main/run/precision-recall.png', dpi=300)
+    plt.savefig('Bayesian_main/run/figs/precision-recall.png', dpi=300)
+
+def get_ROC_curve(pred_list):
+    plt.figure()
+    for i in range(len(pred_list)):
+            y_test_fold, y_arr = pred_list[i]
+            plot_PR(y_test_fold, y_arr, i+1)
+    
+def get_PR_curve(pred_list):
+    plt.figure()
+    for i in range(len(pred_list)):
+        y_test_fold, y_arr = pred_list[i]
+        fpr, tpr, thersholds = roc_curve(y_test_fold, y_arr)
+        plot_roc(fpr, tpr, i+1)
 
 def get_confusion_matrix(cfm_list, clusters):
     """
@@ -477,9 +494,9 @@ def get_confusion_matrix(cfm_list, clusters):
     cols = clusters
     fig, axes = plt.subplots(nrows=1, ncols=cols, figsize=(10, 5))
     for i, plt_image in enumerate(cfm_list):
-        index2 = i
+        index2 = i 
         axes[index2].matshow(plt_image, cmap=plt.get_cmap('Blues'), alpha=0.5)
-        axes[index2].set_title(f"split set {i}")
+        axes[index2].set_title(f"split set {i+1}")
 
         # Add labels to each cell
         for j in range(plt_image.shape[0]):
@@ -488,9 +505,19 @@ def get_confusion_matrix(cfm_list, clusters):
                 axes[index2].annotate(text, xy=(k, j), ha='center', va='center', 
                                       color='black',  weight='heavy', 
                                       bbox=dict(boxstyle='round,pad=0.5', fc='yellow', ec='k', lw=1.5, alpha=0.8))
+                
+                # Add labels for y_pred
+                axes[index2].set_xticks(np.arange(plt_image.shape[1]))
+                axes[index2].set_xticklabels(np.arange(plt_image.shape[1]))
+                axes[index2].set_xlabel("Prediction")
+
+                # Add labels for y_true
+                axes[index2].set_yticks(np.arange(plt_image.shape[0]))
+                axes[index2].set_yticklabels(np.arange(plt_image.shape[0]))
+                axes[index2].set_ylabel("Label")
 
     fig.tight_layout()
-    plt.savefig('./Bayesian_main/run/cfm.png')
+    plt.savefig('./Bayesian_main/run/figs/cfm.png')
 
 
 def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
@@ -535,21 +562,59 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
     plt.rcParams['font.size'] = 14
 
     # Plot target points with improved style
-    plt.scatter(dep_XArray, dep_YArray, c='red', s=10, alpha=0.8, label=f"Target (split {index})")
+    plt.scatter(dep_XArray, dep_YArray, c='red', s=20, alpha=0.8, label=f"Target (split set {index})")
     plt.xlabel('X')
     plt.ylabel('Y')
     # plt.title('Result Map')
 
     # Add a legend
     plt.legend(fontsize=14)
-    cbar = plt.colorbar(shrink=0.5, aspect=30, pad=0.02)
-    cbar.ax.set_ylabel('Prediction', fontsize=12)
+    cbar = plt.colorbar(shrink=1, aspect=30, pad=0.02)
+    cbar.ax.set_ylabel('Prediction', fontsize=14)
 
     # Adjust subplot spacing
     plt.tight_layout()
     plt.gca().set_facecolor('lightgray')
 
     # Save the figure
-    plt.savefig('result_map.png', dpi=300)
+    plt.savefig('Bayesian_main/run/figs/result_map.png', dpi=300)
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
     print(f"\t--- {t} New feature map Saved\n")
+
+def compare_baseline_result(de_arr, grid_arr, random_arr, bo_path):
+    
+    # load the saved data
+    bo_arr = np.load(bo_path)
+    bo_f1 = bo_arr[1]
+    bo_pre = bo_arr[0]
+
+    default_f1 = de_arr.T[0]
+    default_pre = de_arr.T[1]
+    grid_f1 = grid_arr.T[0]
+    grid_pre = grid_arr.T[1]
+    random_f1 = random_arr.T[0]
+    random_pre = random_arr.T[1]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    ax.scatter(np.full(len(bo_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(bo_f1)), bo_f1, c='#FF4500', label='BO System')
+    ax.scatter(np.full(len(bo_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(bo_pre)), bo_pre, c='#FF4500')
+    ax.scatter(np.full(len(default_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(default_f1)), default_f1, c='#9932CC', label='Default System', alpha = 0.9)
+    ax.scatter(np.full(len(default_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(default_pre)), default_pre, c='#9932CC', alpha = 0.9)
+
+    ax.scatter(np.full(len(random_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(random_f1)), random_f1, c='#6495ED', label='Random System', alpha = 0.7)
+    ax.scatter(np.full(len(random_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(random_pre)), random_pre, c='#6495ED', alpha = 0.7)
+
+    ax.scatter(np.full(len(grid_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(grid_f1)), grid_f1, c='#FFFF00', label='Grid System', alpha = 0.9)
+    ax.scatter(np.full(len(grid_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(grid_pre)), grid_pre, c='#FFFF00', alpha = 0.9)
+
+    ax.set_xticks([1, 2])
+    ax.set_xticklabels(['F1', 'Precision'],  fontsize = 12)
+
+    plt.ylabel('Scores', fontsize = 12)
+    plt.gca().set_facecolor('lightgray')
+    plt.legend()
+    plt.grid(alpha = 0.5)
+    plt.xlim(0.5, 2.5)
+    plt.yticks(fontsize=12)
+    plt.savefig("./1111.png")

@@ -47,7 +47,7 @@ class Bayesian_optimization:
             path(string): The string to record the name of data estimated.
         """
         self.gaussian = GaussianProcessRegressor(kernel=ConstantKernel(cons_value, constant_value_bounds="fixed") * RBF(rbf_value, length_scale_bounds="fixed"))
-        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode, metrics=metrics)
+        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode, metrics=metrics, modify=True)
         
         if default_params:
             self.param_space = ParamSpace(algorithm.DEFAULT_CONTINUOUS_BOOK, algorithm.DEFAULT_DISCRETE_BOOK, algorithm.DEFAULT_ENUM_BOOK, algorithm.DEFAULT_STATIC_BOOK)
@@ -262,12 +262,11 @@ class Bayesian_optimization:
         
         # Print the best sample in initialized ones
         if out_log:
-
             now = time.time()
             if len(self.accompany_metric) >= 0:    
-                self.param_space.log_head(self.path.replace('Bayesian_main/data/', '') ,name_best, [y_best] + self.accompany_metric + [now - start_time], self.metrics)
+                self.param_space.log_head(self.path.split('/')[-1] ,name_best, [y_best] + self.accompany_metric + [now - start_time], self.metrics)
             else:
-                self.param_space.log_head(self.path.replace('Bayesian_main/data/', '') ,name_best, y_best, self.metrics)
+                self.param_space.log_head(self.path.split('/')[-1] ,name_best, y_best, self.metrics)
                             
         for _ in range(steps):
             x_sample, name = self.opt_acquisition(X)
@@ -298,7 +297,7 @@ class Bayesian_optimization:
                 now = time.time()
                 if len(self.accompany_metric) > 0:
                     y_ground = [y_ground] + self.accompany_metric
-                self.param_space.log_out(self.path.replace('Bayesian_main/data/', ''), name, y_ground + [now - start_time], flag)
+                self.param_space.log_out(self.path.split('/')[-1], name, y_ground + [now - start_time], flag)
             
             # Early stop
             if not flag:

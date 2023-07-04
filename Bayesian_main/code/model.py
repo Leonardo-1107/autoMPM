@@ -10,7 +10,6 @@ from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score,
 from sklearn.model_selection import KFold
 
 from utils import show_result_map
-name = 'Bayesian_main/data/NovaScotia2.pkl'
 
 class Model:
     DEFAULT_METRIC = roc_auc_score
@@ -18,7 +17,7 @@ class Model:
     DEFAULT_TEST_CLUSTERS = 4
     WARNING_FIDELITY_HIGH = 20
     
-    def __init__(self, data_path, fidelity=3, test_clusters=6, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc']):
+    def __init__(self, data_path, fidelity=3, test_clusters=4, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc'], modify = False):
         """Initialize the input data, algorithm for the target task, evaluation fidelity and test clusters
 
         Args:
@@ -29,20 +28,21 @@ class Model:
             metrics: (list, optional): The metrics used to judege the performance.
         """
         with open(data_path, 'rb') as f:
-            feature_arr, total_label, common_mask, deposite_mask = pickle.load(f)
+            feature_arr, total_label, common_mask, deposit_mask = pickle.load(f)
         self.set_fidelity(fidelity)
         self.set_test_clusters(test_clusters)
         self.feature_arr = feature_arr
         self.total_label_arr = total_label.astype(int)
         self.label_arr = self.total_label_arr[0]
         self.common_mask = common_mask
-        self.deposite_mask = deposite_mask
+        self.deposit_mask = deposit_mask
         self.height, self.width = common_mask.shape
         self.algorithm = algorithm
         self.path = data_path
         self.mode = mode
         self.test_index = 0
         self.metrics = metrics
+        self.modify = modify
         return
        
     def set_test_clusters(self, test_clusters=DEFAULT_TEST_CLUSTERS):
@@ -236,6 +236,7 @@ class Model:
         Returns:
             score_list (list): Scores for each metric
         """
+        modify = self.modify
         metrics = self.metrics
         if not isinstance(metrics, list):
             metrics = [metrics]
@@ -286,27 +287,32 @@ class Model:
 
         else: 
             test_mask_list, dataset_list = self.dataset_split(test_mask, modify=modify)
+            y_arr_record = []
             for dataset in dataset_list:
                 X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
                 pred_arr, y_arr = algo.predicter(X_test_fold)
-            
+                
                 scores = []
                 for metric in metric_list:
                     if metric == f1_score or metric == precision_score:
-                        # Only make sense when data augment deployed
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score)
                     else:
                         score = metric(y_test_fold, y_arr)
                         scores.append(score)    
+
                 if len(scores) == 1:
                     scores = scores[0]
                 score_list.append(scores)
 
-            pred_arr, y_arr = algo.predicter(self.feature_arr)
-            show_result_map(result_values=y_arr, mask=self.common_mask, deposit_mask=self.deposite_mask, test_mask=test_mask_list[len(test_mask_list)-1])
+                _, y_arr_feature_map = algo.predicter(self.feature_arr)
+                y_arr_record.append(y_arr_feature_map)
+            
+            # plot result map and confusion matrix
+            for i in range(len(test_mask_list)):   
+                show_result_map(result_values=y_arr_record[i], mask=self.common_mask, deposit_mask=self.deposit_mask, test_mask=test_mask_list[i], index=i+1, clusters=self.test_clusters)
         return score_list
 
     def obj_train_parallel(self, queue, args):
