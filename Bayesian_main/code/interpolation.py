@@ -107,12 +107,8 @@ if __name__ == '__main__':
     x_geo, y_geo = geochemistry.geometry.x.values, geochemistry.geometry.y.values
     x_max, y_max = mask_ds.index(mask_ds.bounds.right, mask_ds.bounds.bottom)
     z = geochemistry[feature].values
-    # pylab.imshow(feature_data)
-    # pylab.savefig('Bayesian_main/record/interp_before.png')
     
     interpOPT = interp_opt()
     result = interpOPT.optimize(x_geo, y_geo, z, x_max, y_max)
     print(result)
-    # pylab.imshow(result)
-    # pylab.savefig('Bayesian_main/record/interp_result.png')
     
