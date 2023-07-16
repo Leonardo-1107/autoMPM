@@ -1,7 +1,9 @@
-from algo import rfcAlgo, logiAlgo, mlpAlgo, svmAlgo
+from algo import *
 from optimization import Bayesian_optimization
 import numpy as np
 from model import Model
+from multiprocessing import Process, Manager
+import concurrent.futures
 
 """
 Here is a new method to choose a better machine learning model before the main preocess to optimize
@@ -16,15 +18,28 @@ class Method_select:
     def __init__(self, algorithms=[rfcAlgo, mlpAlgo]):
         self.algos = algorithms
     
-    def select(self, data_path, task):
-        score_list = []
-        for algo in self.algos:
-            print(f'Evalauting {str(algo)} Model')
-            bo = Bayesian_optimization(data_path, task, algo,'random', True)
-            best, X, y = bo.optimize(steps=3, out_log=False, return_trace=True)
-            score = np.max(y)
-            score_list.append(score)
+    def evaluate_algo(self, algo, data_path, task, mode):
+        print(f'Evalauting {algo.__name__} Model')
+        bo = Bayesian_optimization(data_path, task, algo, mode=mode, default_params=True)
+        best, X, y = bo.optimize(steps=3, out_log=False, return_trace=True)
+        score = np.mean(y)
+        print(y, score)
+        return score
 
+    def select(self, data_path, task, mode):
+        score_list = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            future_to_algo = {executor.submit(self.evaluate_algo, algo, data_path, task, mode): algo for algo in self.algos}
+            
+            for future in concurrent.futures.as_completed(future_to_algo):
+                algo = future_to_algo[future]
+                try:
+                    score = future.result()
+                    score_list.append(score)
+                except Exception as exc:
+                    print(f'Error while evaluating {algo.__name__} Model: {exc}')
+        
         return score_list
 
 # For test

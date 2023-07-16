@@ -27,7 +27,7 @@ class Bayesian_optimization:
     WARNING_WORKER_HIGH = 20        # If worker is set to be higher than this, a warning will show up
     
 
-    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', metrics = ['f1','pre','auc'], default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
+    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', metrics = ['auc','f1','pre'], default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
         """Initialize the target task, the algorithm to accomplish the task and settings of corresponding hyperparamters
 
         Args:
@@ -47,7 +47,7 @@ class Bayesian_optimization:
             path(string): The string to record the name of data estimated.
         """
         self.gaussian = GaussianProcessRegressor(kernel=ConstantKernel(cons_value, constant_value_bounds="fixed") * RBF(rbf_value, length_scale_bounds="fixed"))
-        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode, metrics=metrics, modify=True)
+        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode, metrics=metrics)
         
         if default_params:
             self.param_space = ParamSpace(algorithm.DEFAULT_CONTINUOUS_BOOK, algorithm.DEFAULT_DISCRETE_BOOK, algorithm.DEFAULT_ENUM_BOOK, algorithm.DEFAULT_STATIC_BOOK)
@@ -172,7 +172,6 @@ class Bayesian_optimization:
         else:
             best = np.argmax(scores)
             return x_samples[best], names[best]
-            
         
     
     def evaluate_parallel(self, names, x_num):
@@ -215,6 +214,16 @@ class Bayesian_optimization:
         
         return y
     
+    def evaluate_serial(self, names):
+        """Without multi-processing and only one thread
+        """
+        y = []
+        for name in names:
+            score = self.objective(name)
+            y.append(score[0])
+            
+        return np.array(y)
+
     def initialize(self, x_num=5):
         """Initialize x_num configurations
 
@@ -226,7 +235,7 @@ class Bayesian_optimization:
             Iterable: Scores of initialized configurations
             Iterable: Initialized configurations in name format
         """
-        X, names = self.param_space.sample(x_num)       
+        X, names = self.param_space.sample(x_num)   
         y = self.evaluate_parallel(names, x_num) 
         # y = np.array([self.objective(x) for x in X]).reshape(-1,1)
         if isinstance(y, list):
@@ -235,7 +244,7 @@ class Bayesian_optimization:
     
         return X, y, names
     
-    def optimize(self, steps=10, x_num=3, out_log=True, early_stop=0, return_trace=False):
+    def optimize(self, steps=10, x_num=5, out_log=True, early_stop=0, return_trace=False):
         """Optimize the hyperparamters of the algorithm for the target task
 
         Args:
@@ -250,7 +259,6 @@ class Bayesian_optimization:
         """
         start_time = time.time()
         X, y, names = self.initialize(x_num)
-        
         if early_stop == 0:
             early_stop = steps
         early_stop_cnt = 0
@@ -271,12 +279,15 @@ class Bayesian_optimization:
         for _ in range(steps):
             x_sample, name = self.opt_acquisition(X)
             if self.worker > 1:
+                # y_ground = self.evaluate_serial(name)
+                # worker_best = np.max(np.where(y_ground == np.max(y_ground)))
                 y_ground = self.evaluate_parallel(name, self.worker)
                 worker_best = y_ground.argmax()
+                
                 name = name[worker_best]
                 x_sample = x_sample[worker_best]
                 y_ground = y_ground[worker_best]
-                
+
             else:
                 y_ground = self.objective(name)
             # y_sample, _ = self.surrogate(X)

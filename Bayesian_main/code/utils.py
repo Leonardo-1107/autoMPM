@@ -8,8 +8,10 @@ import heapq
 import scipy.stats as ss
 from scipy.interpolate import interp2d
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, roc_curve
-import pykrige
+from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, roc_curve, make_scorer
+from sklearn.utils.class_weight import compute_sample_weight, compute_class_weight
+                
+# import pykrige
 import time
 import os
 import sys
@@ -170,15 +172,16 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='
         )
     
     
-def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
+def preprocess_data_interpolate(data_dir='./dataset/Washington', augment:bool = True, method = 'kriging', feature_filter = False):
     """
     Convert point data to raster data by interpolation
 
     Args:
         data_dir (str, optional): The directory of raw data. 
         augment (bool, optional): Whether to perform data augment operations. Defaults to True.
-
-
+        method (str, optional): The method for interpolation
+        feature_filter (bool, optional): Whether to fileter the raw features before process instead of using feature list. Defaults to False.
+        
     Returns:
         Array: The array of samples' feature
         Array: The array of samples' label
@@ -206,11 +209,6 @@ def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
     if augment:
         label_arr2d = augment_2D(label_arr2d)
     label_arr = label_arr2d[mask]
-
-    # Feature filtering by corr
-    feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
-    # Feature filtering by weights of RFC
-    feature_arr = feature_selecter_algo(feature_arr, label_arr)
     
     geochemistry = geopandas.read_file(data_dir+'/shapefile/Geochemistry.shp')   
     feature_list = ['B', 'Ca', 'Cu', 'Fe', 'Mg', 'Ni']
@@ -235,8 +233,6 @@ def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
     for feature in feature_list:
         print(f'Processing {feature}')
         z = geochemistry[feature].values
-        method = 'kriging'
-        
         if method == 'kriging':
             
             OK = pykrige.OrdinaryKriging(
@@ -261,7 +257,12 @@ def preprocess_data_interpolate(data_dir='Washington', augment:bool = True):
     feature_arr = np.zeros((mask.sum(),len(feature_list)))
     for idx in range(len(feature_list)):
         feature_arr[:,idx] = feature_arr2d_dict[feature_list[idx]][mask]
-     
+
+    if feature_filter:
+        # Feature filtering by corr
+        feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
+        # Feature filtering by weights of RFC
+        feature_arr = feature_selecter_algo(feature_arr, label_arr)
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, deposite_mask)
     with open(f'./data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
@@ -569,7 +570,7 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
 
     # Add a legend
     plt.legend(fontsize=14)
-    cbar = plt.colorbar(shrink=1, aspect=30, pad=0.02)
+    cbar = plt.colorbar(shrink=0.35, aspect=30, pad=0.02)
     cbar.ax.set_ylabel('Prediction', fontsize=14)
 
     # Adjust subplot spacing
@@ -585,8 +586,8 @@ def compare_baseline_result(de_arr, grid_arr, random_arr, bo_path):
     
     # load the saved data
     bo_arr = np.load(bo_path)
-    bo_f1 = bo_arr[1]
-    bo_pre = bo_arr[0]
+    # bo_f1 = bo_arr[0]
+    # bo_pre = bo_arr[1]
 
     default_f1 = de_arr.T[0]
     default_pre = de_arr.T[1]
@@ -595,18 +596,23 @@ def compare_baseline_result(de_arr, grid_arr, random_arr, bo_path):
     random_f1 = random_arr.T[0]
     random_pre = random_arr.T[1]
 
+    time_arr = np.linspace(0, 39, num=40)  # Example time array
+
+    # Rest of your code
+
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    ax.scatter(np.full(len(bo_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(bo_f1)), bo_f1, c='#FF4500', label='BO System')
-    ax.scatter(np.full(len(bo_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(bo_pre)), bo_pre, c='#FF4500')
-    ax.scatter(np.full(len(default_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(default_f1)), default_f1, c='#9932CC', label='Default System', alpha = 0.9)
-    ax.scatter(np.full(len(default_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(default_pre)), default_pre, c='#9932CC', alpha = 0.9)
+    # Modify x-values to represent time
+    # ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(bo_f1)), bo_f1, c='#FF4500', label='BO System')
+    # ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(bo_pre)), bo_pre, c='#FF4500')
+    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(default_f1)), default_f1, c='#9932CC', label='Default System', alpha=0.9)
+    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(default_pre)), default_pre, c='#9932CC', alpha=0.9)
 
-    ax.scatter(np.full(len(random_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(random_f1)), random_f1, c='#6495ED', label='Random System', alpha = 0.7)
-    ax.scatter(np.full(len(random_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(random_pre)), random_pre, c='#6495ED', alpha = 0.7)
+    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(random_f1)), random_f1, c='#6495ED', label='Random System', alpha=0.7)
+    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(random_pre)), random_pre, c='#6495ED', alpha=0.7)
 
-    ax.scatter(np.full(len(grid_f1), 1) + np.random.uniform(-0.05, 0.05, size=len(grid_f1)), grid_f1, c='#FFFF00', label='Grid System', alpha = 0.9)
-    ax.scatter(np.full(len(grid_pre), 2) + np.random.uniform(-0.05, 0.05, size=len(grid_pre)), grid_pre, c='#FFFF00', alpha = 0.9)
+    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(grid_f1)), grid_f1, c='#FFFF00', label='Grid System', alpha=0.9)
+    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(grid_pre)), grid_pre, c='#FFFF00', alpha=0.9)
 
     ax.set_xticks([1, 2])
     ax.set_xticklabels(['F1', 'Precision'],  fontsize = 12)
@@ -618,3 +624,20 @@ def compare_baseline_result(de_arr, grid_arr, random_arr, bo_path):
     plt.xlim(0.5, 2.5)
     plt.yticks(fontsize=12)
     plt.savefig("./1111.png")
+
+def criterion_loss(mode, algo, X_val_fold, y_val_fold, y_train_fold = None):
+    
+    # the loss applied in training process
+    if mode == 'random':
+        class_weights = compute_class_weight('balanced', classes=np.unique(y_train_fold), y=y_train_fold)
+        class_weight_dict = {cls: weight for cls, weight in zip(np.unique(y_train_fold), class_weights)}
+    else:
+        class_weight_dict = 'balanced'
+    def weighted_cross_entropy(y_true, y_pred, weight = 'balanced', epsilon = 1e-7):
+        sample_weights = compute_sample_weight(class_weight_dict, y_true)
+        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
+        loss = -np.mean(sample_weights * (y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred)))
+        return loss
+                
+    weighted_ce_scorer = make_scorer(weighted_cross_entropy, greater_is_better=False)
+    return weighted_ce_scorer(algo, X_val_fold, y_val_fold)

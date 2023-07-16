@@ -182,7 +182,7 @@ class ParamSpace:
             for i in range(len(self.name_list)):
                 f.write(f"{self.name_list[i]} | ")
             length = len(metrics) + 2
-
+            f.write("Train Score | ")
             for i in range(length):
                 try:
                     if metrics[i] == 'auc':
@@ -191,6 +191,8 @@ class ParamSpace:
                         f.write("F1 Score | ")
                     if metrics[i] == 'pre':
                         f.write("Precision | ")
+                    if metrics[i] == 'recall':
+                        f.write("Recall | ")
                 except:
                     metric_name = metrics[i-len(metrics)].upper()
                     f.write(f"{metric_name} std | ")
@@ -199,7 +201,7 @@ class ParamSpace:
             f.write("--- | ")
             for i in range(len(self.name_list)):
                 f.write(f"--- | ")
-            f.write("--- | --- | --- | --- | --- | --- | \n")
+            f.write("--- | --- | --- | --- | --- | --- | --- | \n")
         self.log_out(name, x, y, True)
 
             

@@ -6,10 +6,11 @@ from multiprocessing import Process, Queue
 import numpy as np
 from algo import rfcAlgo, mlpAlgo
 from sklearn.cluster import KMeans
-from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, accuracy_score
-from sklearn.model_selection import KFold
+from sklearn.utils import shuffle as sk_shuffle
+from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, accuracy_score, recall_score
+from sklearn.model_selection import KFold, train_test_split
 
-from utils import show_result_map
+from utils import *
 
 class Model:
     DEFAULT_METRIC = roc_auc_score
@@ -70,7 +71,7 @@ class Model:
             array: The cluster id that each sample belongs to
         """
         coord = np.concatenate([x, y], axis=1)
-        cl = KMeans(n_clusters=cluster).fit(coord)
+        cl = KMeans(n_init='auto', n_clusters=cluster).fit(coord)
         cll = cl.labels_
         
         return cll
@@ -125,7 +126,7 @@ class Model:
             test_mask_list = []
             # Randomly choose the start grid
             mask_sum = self.common_mask.sum()
-            test_num = int(mask_sum / self.test_clusters)
+            test_num = int(mask_sum / 5)
             x_arr, y_arr = self.common_mask.nonzero()
             
             positive_x = x_arr[self.label_arr.astype(bool)].reshape((-1,1))
@@ -135,7 +136,7 @@ class Model:
             
             for i in range(self.test_clusters):
                 cluster_arr = (cll == i)
-                # print(i, cluster_arr.sum()/self.label_arr.sum())
+                
                 cluster_x = positive_x[cluster_arr].squeeze()
                 cluster_y = positive_y[cluster_arr].squeeze()
                 # Throw out the empty array
@@ -159,7 +160,13 @@ class Model:
             train_mask = train_mask[self.common_mask]
             X_train_fold, X_test_fold = self.feature_arr[train_mask], self.feature_arr[test_mask]
             y_train_fold, y_test_fold = self.total_label_arr[1][train_mask], self.label_arr[test_mask]
-            
+
+            # split the val set
+            X_train_fold, X_val_fold, y_train_fold, y_val_fold = train_test_split(
+                                                                    X_train_fold, 
+                                                                    y_train_fold, 
+                                                                    test_size=0.25, 
+                                                                    random_state=42)
             # Modify y_test_fold
             if modify:
                 true_num = y_train_fold.sum()
@@ -170,12 +177,14 @@ class Model:
                 X_train_fold = X_train_fold[train]
                 y_train_fold = y_train_fold[train]
             
-            dataset = (X_train_fold, y_train_fold, X_test_fold, y_test_fold)
+            X_train_fold, y_train_fold = sk_shuffle(X_train_fold, y_train_fold)
+
+            dataset = (X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold)
             dataset_list.append(dataset)
         
         return tmpt, dataset_list
     
-    def random_spilt(self, modify =False):
+    def random_split(self, modify =False):
         """Split the dataset into train set and test set, and apply K-fold Cross-validation.
 
         Args:
@@ -191,25 +200,33 @@ class Model:
         aug_label = total_label[1]
         
         dataset_list = []
-        kf = KFold(n_splits=self.test_clusters, shuffle=True)
+        kf = KFold(n_splits=5, shuffle=True)
         for train_index , test_index in kf.split(feature): 
             
             X_train_fold, X_test_fold, y_train_fold, y_test_fold = [],[],[],[]
+            X_val_fold, y_val_fold = [], []
+            
             for i in train_index:
                 X_train_fold.append(feature[i])
                 y_train_fold.append(aug_label[i])
-            
+
+            # split the val set
+            X_train_fold, X_val_fold, y_train_fold, y_val_fold = train_test_split(
+                                                                    X_train_fold, 
+                                                                    y_train_fold, 
+                                                                    test_size=0.25, 
+                                                                    random_state=42)
+
             for i in test_index:
                 X_test_fold.append(feature[i])
                 y_test_fold.append(ground_label[i])
-                
+
             X_train_fold, X_test_fold, y_train_fold, y_test_fold = np.array(X_train_fold), np.array(X_test_fold), np.array(y_train_fold), np.array(y_test_fold)
-            
+            X_val_fold, y_val_fold = np.array(X_val_fold), np.array(y_val_fold)
+
             if y_test_fold.sum() == 0: 
                 continue
-
             if modify:
-                    
                     true_num = y_train_fold.sum()
                     index = np.arange(len(y_train_fold))
                     true_train = index[y_train_fold == 1]
@@ -218,14 +235,13 @@ class Model:
                     X_train_fold = X_train_fold[train]
                     y_train_fold = y_train_fold[train]
 
-            dataset = (X_train_fold, y_train_fold, X_test_fold, y_test_fold)
+            dataset = (X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold)
             dataset_list.append(dataset)
             
-        return dataset_list
-    
-    
+        return dataset_list 
+
     def train(self, params, test_mask=None, modify=False):
-        """Train a random forest with test-set as a rectangle
+        """Train a model with test-set as a rectangle
 
         Args:
             params (dict): parameters of the machine learning algorithm
@@ -252,6 +268,8 @@ class Model:
                     metric = f1_score
                 elif metric.lower() == 'precision_score' or metric.lower() == 'pre':
                     metric = precision_score
+                elif metric.lower() == 'recall_score' or metric.lower() == 'recall':
+                    metric = recall_score
      
                 else:
                     warnings.warn(f'Wrong metric! Replace it with default metric {Model.DEFAULT_METRIC.__name__}.')
@@ -265,38 +283,48 @@ class Model:
             
         score_list = []
         if self.mode  == 'random':
-            dataset_list = self.random_spilt(modify=modify)
+            dataset_list = self.random_split(modify=False)
             for dataset in dataset_list:
-                X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
+                X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
-            
-                pred_arr, y_arr = algo.predicter(X_test_fold)
                 scores = []
+                
+                loss = criterion_loss(self.mode, algo, X_val_fold, y_val_fold, y_train_fold)
+                scores.append(loss)
+                    
+                # testing
+                pred_arr, y_arr = algo.predicter(X_test_fold)
+             
                 for metric in metric_list:
-                    if metric == f1_score or metric == precision_score:
+                    if metric != roc_auc_score:
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score) 
                     else:
                         score = metric(y_test_fold, y_arr)
                         scores.append(score)
-                    
+
                 if len(scores) == 1:
                     scores = scores[0]
                 score_list.append(scores)
-
+            
         else: 
-            test_mask_list, dataset_list = self.dataset_split(test_mask, modify=modify)
+            test_mask_list, dataset_list = self.dataset_split(test_mask, modify=True)
             y_arr_record = []
             for dataset in dataset_list:
-                X_train_fold, y_train_fold, X_test_fold, y_test_fold = dataset
+                X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
                 algo.fit(X_train_fold, y_train_fold)
+                scores = []
+                
+                loss = criterion_loss(self.mode, algo, X_val_fold, y_val_fold, y_train_fold)
+                scores.append(loss)
+                
+                # testing
                 pred_arr, y_arr = algo.predicter(X_test_fold)
                 
-                scores = []
                 for metric in metric_list:
-                    if metric == f1_score or metric == precision_score:
+                    if metric != roc_auc_score:
                         score = metric(y_true=y_test_fold, y_pred=pred_arr)
                         scores.append(score)
                     else:
@@ -311,8 +339,10 @@ class Model:
                 y_arr_record.append(y_arr_feature_map)
             
             # plot result map and confusion matrix
-            for i in range(len(test_mask_list)):   
-                show_result_map(result_values=y_arr_record[i], mask=self.common_mask, deposit_mask=self.deposit_mask, test_mask=test_mask_list[i], index=i+1, clusters=self.test_clusters)
+            # for i in range(len(test_mask_list)):   
+                # show_result_map(result_values=y_arr_record[i], 
+                #                 mask=self.common_mask, deposit_mask=self.deposit_mask, test_mask=test_mask_list[i], 
+                #                 index=i+1, clusters=self.test_clusters)
         return score_list
 
     def obj_train_parallel(self, queue, args):
@@ -354,7 +384,9 @@ class Model:
             axis=0
             )
         std_arr = np.std(score_list, axis=1)
-        score1_std, score2_std = np.mean(std_arr[:,0]), np.mean(std_arr[:,1])
-        y = list(y) + [score1_std, score2_std]
-              
+        try:
+            score1_std, score2_std = np.mean(std_arr[:,0]), np.mean(std_arr[:,1])
+            y = list(y) + [score1_std, score2_std]
+        except:
+            y = y      
         return y
