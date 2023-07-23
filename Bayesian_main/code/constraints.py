@@ -177,7 +177,7 @@ class ParamSpace:
         self.index = 0
         now = datetime.now().strftime('%Y%m%d_%H_%M_%S')
         self.now = now
-        with open(f"Bayesian_main/run/{name.replace('.pkl','_')}{self.now}_log.md", "w") as f:
+        with open(f"./run/{name.replace('.pkl','_')}{self.now}_log.md", "w") as f:
             f.write("idx | ")
             for i in range(len(self.name_list)):
                 f.write(f"{self.name_list[i]} | ")
@@ -220,7 +220,7 @@ class ParamSpace:
             index = self.index
         else:
             self.index = index
-        with open(f"Bayesian_main/run/{name.replace('.pkl','_')}{self.now}_log.md", "a") as f:
+        with open(f"./run/{name.replace('.pkl','_')}{self.now}_log.md", "a") as f:
             f.write(f"{index} |")
             for x_i in x:
                 f.write(f"{bold}{x_i}{bold} | ")

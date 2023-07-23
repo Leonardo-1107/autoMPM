@@ -3,7 +3,7 @@ import time
 from multiprocessing import Process, Queue
 
 import numpy as np
-from algo import rfcAlgo, logiAlgo, mlpAlgo
+from algo import *
 from constraints import ParamSpace
 from model import Model
 from scipy.stats import norm
@@ -22,7 +22,7 @@ class Bayesian_optimization:
 
     """
     DEFAULT_ACQ_NUM = 1000          # The default number of evaluation points in acquisition 
-    DEFAULT_WORKER = 16              # The default number of workers
+    DEFAULT_WORKER = 3              # The default number of workers
     WARNING_ACQ_NUM_LOW = 30        # If acq_num is set to be lower than this, a warning will show up
     WARNING_WORKER_HIGH = 20        # If worker is set to be higher than this, a warning will show up
     
@@ -43,7 +43,7 @@ class Bayesian_optimization:
             rbf_value (float, optional): Param for RBF of Gaussian Process. Defaults to 10.0.
             acq_num (_type_, optional): The number of evaluation points in acquisition . Defaults to DEFAULT_ACQ_NUM.
             worker (_type_, optional): The number of workers for parallelized Bayesian. Defaults to DEFAULT_WORKER.
-            accompany_metric(list): The list to record evaluation indicators beside the main one. Defaults to [].
+            metric(list): The list to record evaluation indicators beside the main one. Defaults to [].
             path(string): The string to record the name of data estimated.
         """
         self.gaussian = GaussianProcessRegressor(kernel=ConstantKernel(cons_value, constant_value_bounds="fixed") * RBF(rbf_value, length_scale_bounds="fixed"))
@@ -217,11 +217,13 @@ class Bayesian_optimization:
     def evaluate_serial(self, names):
         """Without multi-processing and only one thread
         """
-        y = []
+        y, accompany = [], []
         for name in names:
             score = self.objective(name)
             y.append(score[0])
-            
+            accompany.append(score[1:])
+            if len(accompany) > 0:
+                self.accompany_metric = list(np.mean(np.array(accompany), axis=0))
         return np.array(y)
 
     def initialize(self, x_num=5):
@@ -279,10 +281,10 @@ class Bayesian_optimization:
         for _ in range(steps):
             x_sample, name = self.opt_acquisition(X)
             if self.worker > 1:
-                # y_ground = self.evaluate_serial(name)
-                # worker_best = np.max(np.where(y_ground == np.max(y_ground)))
-                y_ground = self.evaluate_parallel(name, self.worker)
-                worker_best = y_ground.argmax()
+                y_ground = self.evaluate_serial(name)
+                worker_best = np.max(np.where(y_ground == np.max(y_ground)))
+                # y_ground = self.evaluate_parallel(name, self.worker)
+                # worker_best = y_ground.argmax()
                 
                 name = name[worker_best]
                 x_sample = x_sample[worker_best]

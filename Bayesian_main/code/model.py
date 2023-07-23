@@ -4,11 +4,13 @@ from inspect import isfunction
 from multiprocessing import Process, Queue
 
 import numpy as np
-from algo import rfcAlgo, mlpAlgo
+from algo import *
 from sklearn.cluster import KMeans
 from sklearn.utils import shuffle as sk_shuffle
-from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, accuracy_score, recall_score
+from sklearn.metrics import roc_auc_score, roc_curve, f1_score, precision_score, recall_score, average_precision_score
 from sklearn.model_selection import KFold, train_test_split
+from sklearn.preprocessing import StandardScaler
+
 
 from utils import *
 
@@ -71,22 +73,13 @@ class Model:
             array: The cluster id that each sample belongs to
         """
         coord = np.concatenate([x, y], axis=1)
-        cl = KMeans(n_init='auto', n_clusters=cluster).fit(coord)
+        cl = KMeans(n_init='auto', n_clusters=cluster, random_state=42).fit(coord)
         cll = cl.labels_
         
         return cll
 
-    def test_extend(self, x, y, test_num):
-        """Extend from the start point to generate the tesk mask
+    def test_extend(self, x, y, test_num, common_mask):
 
-        Args:
-            x (int): The x coord of the start point to extend from.
-            y (int): The y coord of the start point to extend from.
-            test_num (_type_): The size of test set
-
-        Returns:
-            Array: Mask for test set
-        """
         # Build the test mask
         test_mask = np.zeros_like(self.common_mask).astype(bool)
         test_mask[x, y] = True
@@ -94,34 +87,29 @@ class Model:
         candidate = set([])
         for i in range(test_num-1):
             # Add the neighbor grid which is in the valid region and not chosen yet into the candidate set
-            if x >= 1 and self.common_mask[x-1, y] and not test_mask[x-1, y]:
+            if x >= 1 and common_mask[x-1, y] and not test_mask[x-1, y]:
                 candidate.add((x-1, y))
-            if y >= 1 and self.common_mask[x, y-1] and not test_mask[x, y-1]:
+            if y >= 1 and common_mask[x, y-1] and not test_mask[x, y-1]:
                 candidate.add((x, y-1))
-            if x <= self.height-2 and self.common_mask[x+1, y] and not test_mask[x+1, y]:
+            if x <= self.height-2 and common_mask[x+1, y] and not test_mask[x+1, y]:
                 candidate.add((x+1, y))
-            if y <= self.width-2 and self.common_mask[x, y+1] and not test_mask[x, y+1]:
+            if y <= self.width-2 and common_mask[x, y+1] and not test_mask[x, y+1]:
                 candidate.add((x, y+1))
             
             # Randomly choose the next grid to put in the test set
-            pick = np.random.randint(0, len(candidate))
+            try:
+                pick = np.random.randint(0, len(candidate))
+            except:
+                test_mask[x, y] = True
+                continue
             x, y = list(candidate)[pick]
             candidate.remove((x,y))
             test_mask[x, y] = True
+            
         return test_mask
             
     def dataset_split(self, test_mask_list=None, modify=False):
-        """Split the dataset into train set and test set, repeated for the number of clusters
 
-        Args:
-            test_mask_list (list, optional): Pre-prepared test masks if provided. Defaults to None.
-            modify (bool, optional): Undersample if True. Defaults to False.
-
-        Returns:
-            list: test mask list
-            list: splited dataset list
-        """
-        
         if test_mask_list is None:
             test_mask_list = []
             # Randomly choose the start grid
@@ -144,7 +132,7 @@ class Model:
                     continue
                 start = np.random.randint(0, cluster_arr.sum())
                 x, y = cluster_x[start], cluster_y[start]
-                test_mask = self.test_extend(x, y, test_num)
+                test_mask = self.test_extend(x, y, test_num, self.common_mask)
                 test_mask_list.append(test_mask) 
 
         # Buf the test mask
@@ -155,33 +143,43 @@ class Model:
         for test_mask in test_mask_list:
             train_mask = ~test_mask
             test_mask = test_mask & self.common_mask
-            test_mask = test_mask[self.common_mask]
             train_mask = train_mask & self.common_mask
+            train_deposite_mask = train_mask & self.deposit_mask.astype(bool)
+            
+            # split the val
+            train_mask_sum = train_mask.sum()
+            val_num = int(train_mask_sum / 4)
+            x_arr, y_arr = train_mask.nonzero()
+            positive_indices = np.argwhere(train_deposite_mask)
+            positive_x = positive_indices[:, 0]
+            positive_y = positive_indices[:, 1]
+            
+            start = np.random.randint(0, len(positive_x))
+            x, y = positive_x[start], positive_y[start]
+
+            val_mask = self.test_extend(x, y, val_num, train_mask)
+            val_mask = val_mask[self.common_mask]
+            X_val_fold, y_val_fold = self.feature_arr[val_mask], self.label_arr[val_mask]
+            if y_val_fold.sum() < 2:
+                continue
             train_mask = train_mask[self.common_mask]
+            test_mask = test_mask[self.common_mask]
             X_train_fold, X_test_fold = self.feature_arr[train_mask], self.feature_arr[test_mask]
             y_train_fold, y_test_fold = self.total_label_arr[1][train_mask], self.label_arr[test_mask]
 
-            # split the val set
-            X_train_fold, X_val_fold, y_train_fold, y_val_fold = train_test_split(
-                                                                    X_train_fold, 
-                                                                    y_train_fold, 
-                                                                    test_size=0.25, 
-                                                                    random_state=42)
-            # Modify y_test_fold
+            # modify testing set
             if modify:
                 true_num = y_train_fold.sum()
                 index = np.arange(len(y_train_fold))
                 true_train = index[y_train_fold == 1]
-                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num]
+                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num * 5]
                 train = np.concatenate([true_train, false_train])
                 X_train_fold = X_train_fold[train]
                 y_train_fold = y_train_fold[train]
             
             X_train_fold, y_train_fold = sk_shuffle(X_train_fold, y_train_fold)
-
             dataset = (X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold)
             dataset_list.append(dataset)
-        
         return tmpt, dataset_list
     
     def random_split(self, modify =False):
@@ -223,7 +221,6 @@ class Model:
 
             X_train_fold, X_test_fold, y_train_fold, y_test_fold = np.array(X_train_fold), np.array(X_test_fold), np.array(y_train_fold), np.array(y_test_fold)
             X_val_fold, y_val_fold = np.array(X_val_fold), np.array(y_val_fold)
-
             if y_test_fold.sum() == 0: 
                 continue
             if modify:
@@ -292,6 +289,8 @@ class Model:
                 
                 loss = criterion_loss(self.mode, algo, X_val_fold, y_val_fold, y_train_fold)
                 scores.append(loss)
+                # val_pred, val_prob_pred = algo.predicter(X_val_fold)
+                # scores.append(recall_score(y_val_fold, val_pred))
                     
                 # testing
                 pred_arr, y_arr = algo.predicter(X_test_fold)
@@ -309,16 +308,18 @@ class Model:
                 score_list.append(scores)
             
         else: 
-            test_mask_list, dataset_list = self.dataset_split(test_mask, modify=True)
+            test_mask = load_test_mask(self.path)
+            test_mask, dataset_list = self.dataset_split(test_mask, modify=True)
             y_arr_record = []
             for dataset in dataset_list:
                 X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
+
                 algo.fit(X_train_fold, y_train_fold)
                 scores = []
-                
-                loss = criterion_loss(self.mode, algo, X_val_fold, y_val_fold, y_train_fold)
-                scores.append(loss)
+
+                ood_loss = criterion_loss(self.mode, algo, X_val_fold, y_val_fold, y_train_fold)
+                scores.append(ood_loss)
                 
                 # testing
                 pred_arr, y_arr = algo.predicter(X_test_fold)
@@ -338,11 +339,6 @@ class Model:
                 _, y_arr_feature_map = algo.predicter(self.feature_arr)
                 y_arr_record.append(y_arr_feature_map)
             
-            # plot result map and confusion matrix
-            # for i in range(len(test_mask_list)):   
-                # show_result_map(result_values=y_arr_record[i], 
-                #                 mask=self.common_mask, deposit_mask=self.deposit_mask, test_mask=test_mask_list[i], 
-                #                 index=i+1, clusters=self.test_clusters)
         return score_list
 
     def obj_train_parallel(self, queue, args):
@@ -384,8 +380,10 @@ class Model:
             axis=0
             )
         std_arr = np.std(score_list, axis=1)
+
         try:
-            score1_std, score2_std = np.mean(std_arr[:,0]), np.mean(std_arr[:,1])
+            # the first one is the training score
+            score1_std, score2_std = np.mean(std_arr[:,1]), np.mean(std_arr[:,2])
             y = list(y) + [score1_std, score2_std]
         except:
             y = y      

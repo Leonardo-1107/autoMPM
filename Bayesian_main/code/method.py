@@ -15,19 +15,20 @@ This feature can be enabled in test.py by calling Method_select class
 """
 
 class Method_select:
-    def __init__(self, algorithms=[rfcAlgo, mlpAlgo]):
+    def __init__(self, algorithms=[rfcAlgo, NNAlgo]):
         self.algos = algorithms
-    
+        self.best_algo = None
+        self.opt_score = -100
+
     def evaluate_algo(self, algo, data_path, task, mode):
-        print(f'Evalauting {algo.__name__} Model')
-        bo = Bayesian_optimization(data_path, task, algo, mode=mode, default_params=True)
-        best, X, y = bo.optimize(steps=3, out_log=False, return_trace=True)
+        # print(f'Evalauting {algo.__name__} Model')
+        bo = Bayesian_optimization(data_path, task, algo, mode=mode, default_params=True, worker=3)
+        best, X, y = bo.optimize(steps=5, out_log=False, return_trace=True)
         score = np.mean(y)
-        print(y, score)
+        print(f'{algo.__name__}, score: {score:.4f}')
         return score
 
     def select(self, data_path, task, mode):
-        score_list = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             future_to_algo = {executor.submit(self.evaluate_algo, algo, data_path, task, mode): algo for algo in self.algos}
@@ -36,20 +37,12 @@ class Method_select:
                 algo = future_to_algo[future]
                 try:
                     score = future.result()
-                    score_list.append(score)
+                    if score > self.opt_score:
+                        self.best_algo = algo
+                        self.opt_score = score
+                        
                 except Exception as exc:
                     print(f'Error while evaluating {algo.__name__} Model: {exc}')
-        
-        return score_list
 
-# For test
-if __name__=="__main__":
-    method = Method_select()
-    algo_list = [rfcAlgo, mlpAlgo, logiAlgo]
-    score = method.select(data_path='./data/nefb_fb_hlc_cir.pkl', task=Model)
-    print(score)
-    
-    bo = Bayesian_optimization('./data/nefb_fb_hlc_cir.pkl', algorithm=algo_list[score.index(max(score))], default_params= True)
-    x_best = bo.optimize(20)
-    print(f'Best   n_estimators: {x_best[0]}, max_depth: {x_best[1]}, criterion: {x_best[2]}')
+        return self.best_algo
     

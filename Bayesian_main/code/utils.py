@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import pickle
 import pylab
 import heapq
+from queue import Queue as pyQueue
 import scipy.stats as ss
 from scipy.interpolate import interp2d
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, roc_curve, make_scorer
+from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay, auc, roc_curve, make_scorer, mean_squared_error
 from sklearn.utils.class_weight import compute_sample_weight, compute_class_weight
                 
 # import pykrige
@@ -103,7 +104,7 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
 
     deposite_mask = label_arr2d
     ground_label_arr = label_arr2d[mask]
-    
+    label_arr = ground_label_arr
     # Data augment
     if augment:
         label_arr2d = augment_2D(label_arr2d)
@@ -122,7 +123,7 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
         pickle.dump(dataset, f)
 
 
-def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='Au', label_filter=True):
+def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='Au', label_filter=True, augment=False):
     preprocess_data(
         data_dir=f'{data_dir}/nefb_fb_hlc_cir', 
         feature_list=['As', 'B', 'Ca', 'Co', 'Cr', 'Cu', 'Fe', 'Mg', 'Mn', 'Ni', 'Pb', 'Sc', 'Y'], 
@@ -132,7 +133,8 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='
         target_name=target_name, 
         label_path_list=['shape/nefb_fb_hlc_cir_Deposites.shp', 'shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp', 'shape/nefb_fb_hlc_cir_deposit_Ploymetallic_vein.shp'], 
         output_path=f'{output_dir}/nefb_fb_hlc_cir.pkl',
-        label_filter=label_filter
+        label_filter=label_filter,
+        augment=augment
         )
     
     preprocess_data(
@@ -144,7 +146,8 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='
         target_name=target_name, 
         label_path_list=['shape/tok_lad_scsr_ahc_Basaltic_Cu_Au.shp','shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp', 'tok_lad_scsr_ahc_Placer_Au.shp'], 
         output_path=f'{output_dir}/tok_lad_scsr_ahc.pkl',
-        label_filter=label_filter
+        label_filter=label_filter,
+        augment=augment
         )
     
     preprocess_data(
@@ -156,7 +159,8 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='
         target_name=target_name, 
         label_path_list=['Shapefiles/Au.shp'], #, 'Shapefiles/mineral_deposit.shp'
         output_path=f'{output_dir}/North_Idaho.pkl',
-        label_filter=False
+        label_filter=False,
+        augment=augment
         )
     
     preprocess_data(
@@ -168,7 +172,8 @@ def preprocess_all_data(data_dir='./dataset', output_dir='./data', target_name='
         target_name=target_name, 
         label_path_list=['shapefile/bm_lis_go_quartzveinsAu.shp'], 
         output_path=f'{output_dir}/bm_lis_go_sesrp.pkl',
-        label_filter=label_filter
+        label_filter=label_filter,
+        augment=augment
         )
     
     
@@ -275,6 +280,7 @@ def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mas
         rst = np.load(data_dir+f'/{feature_prefix}{feature}{feature_suffix}')
         feature_dict[feature] = rst
         
+    
     # Load mask data and preprocess
     mask = np.load(data_dir+ '/' +mask_dir).astype(np.int64)
     mask = make_mask(data_dir, mask_data=mask, show=True)
@@ -295,7 +301,7 @@ def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mas
         if augment:
             label_arr2d = augment_2D(depositMask) 
             label_arr = label_arr2d[mask]
-
+    
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, depositMask)
     with open(output_path, 'wb') as f:
         pickle.dump(dataset, f)
@@ -323,7 +329,7 @@ def make_mask(data_dir, mask_data, show =False):
 
     return mask
 
-def augment_2D(array):
+def augment_2D(array, wide_mode = False):
     """
     For data augment function. Assign the 3*3 blocks around the sites to be labeled.
     """
@@ -331,6 +337,16 @@ def augment_2D(array):
     a = np.where(array == 1)
     x, y = a[0], a[1]
     aug_touple = [(-1,-1),(-1,1),(1,-1),(1,1),(0,1),(0,-1),(1,0),(-1,0)]
+    print(array.sum())
+    if wide_mode:
+        aug_touple = [
+            (-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
+            (-1, -2), (-1, -1), (-1, 0), (-1, 1), (-1, 2),
+            (0, -2),  (0, -1),  (0, 0),  (0, 1),  (0, 2),
+            (1, -2),  (1, -1),  (1, 0),  (1, 1),  (1, 2),
+            (2, -2),  (2, -1),  (2, 0),  (2, 1),  (2, 2),
+        ]
+
     for idx in range(len(x)):
         for m,n in aug_touple:
             newx = x[idx] + m
@@ -338,7 +354,6 @@ def augment_2D(array):
             
             if (0< newx and newx < array.shape[0]) and (0< newy and newy < array.shape[1]):
                 new[newx][newy] = 1
-                 
     return new
 
 
@@ -380,58 +395,6 @@ def feature_selecter_algo(feature_arr, label_arr, n = 20):
     
     return np.array(selected_feature_arr).T
 
-def getDepositMask(name = 'Washington'):
-    """
-    Warning: will no longer be used
-    Return the mineral sites when drawing the feature map
-    """
-
-    if name == 'Bayesian_main/data/NovaScotia.pkl':
-        return np.load("Bayesian_main/dataset/NovaScotia/deposit.npy")
-    
-    if name == 'Bayesian_main/data/NovaScotia2.pkl':
-        return np.load("Bayesian_main/dataset/NovaScotia2/Target.npy")
-    
-    if 'North' in name:
-        data_dir = 'Bayesian_main/dataset/North Idaho'
-        mask_ds = rasterio.open(data_dir+'/Shapefiles/mask.tif')
-        mask_data = mask_ds.read(1)
-        au = geopandas.read_file(data_dir+'/Shapefiles/Au.shp')
-        
-        
-    if 'Washington' in name:
-        mask_ds = rasterio.open('Bayesian_main/dataset/Washington/shapefile/mask1.tif')
-        mask_data = mask_ds.read(1)
-        au = geopandas.read_file('Bayesian_main/dataset/Washington/shapefile/Au.shp')
-    
-    if 'bm_lis' in name:
-        mask_ds = rasterio.open('Bayesian_main/dataset/bm_lis_go_sesrp/raster/mask.tif')
-        mask_data = mask_ds.read(1)
-        au = geopandas.read_file('Bayesian_main/dataset/bm_lis_go_sesrp/shapefile/bm_lis_go_quartzveinsAu.shp')
-
-    if 'nefb' in name:
-        mask_ds = rasterio.open('Bayesian_main/dataset/nefb_fb_hlc_cir/raster/mask1.tif')
-        mask_data = mask_ds.read(1)
-        au = geopandas.read_file('Bayesian_main/dataset/nefb_fb_hlc_cir/shape/nefb_fb_hlc_cir_deposit_Au_quarzt.shp')
-    
-    if 'tok_lad' in name:
-        mask_ds = rasterio.open('Bayesian_main/dataset/tok_lad_scsr_ahc/raster/mask.tif')
-        mask_data = mask_ds.read(1)
-        au = geopandas.read_file('Bayesian_main/dataset/tok_lad_scsr_ahc/tok_lad_scsr_ahc_deposites.shp')
-        #  Bayesian_main/dataset/tok_lad_scsr_ahc/shape/tok_lad_scsr_ahc_porphyry_Cu_Au.shp
-
-    x = au.geometry.x.to_numpy()
-    y = au.geometry.y.to_numpy()
-    row, col = mask_ds.index(x,y)
-
-    row_np = np.array(row)
-    row_np[np.array(row) == mask_data.shape[0]] = 1
-    label_arr2d = np.zeros_like(mask_data)
-
-    for x, y in zip(row_np, col):
-        label_arr2d[x, y] = 1
-
-    return label_arr2d
 
 def plot_roc(fpr, tpr, index, scat=False, save=True):
     """
@@ -475,14 +438,15 @@ def plot_PR(y_test_fold, y_arr, index):
 
     plt.savefig('Bayesian_main/run/figs/precision-recall.png', dpi=300)
 
-def get_ROC_curve(pred_list):
+def get_PR_curve(pred_list):
     plt.figure()
     for i in range(len(pred_list)):
             y_test_fold, y_arr = pred_list[i]
             plot_PR(y_test_fold, y_arr, i+1)
     
-def get_PR_curve(pred_list):
+def get_ROC_curve(pred_list):
     plt.figure()
+
     for i in range(len(pred_list)):
         y_test_fold, y_arr = pred_list[i]
         fpr, tpr, thersholds = roc_curve(y_test_fold, y_arr)
@@ -543,7 +507,7 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
 
 def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, clusters=4):
     cols = int((clusters + 0.5) / 2)
-
+    # cols = 1
     if index == 1:
         plt.figure(dpi=600)
         plt.subplots(2, cols, figsize=(15, 15), sharex=True, sharey=False)
@@ -560,18 +524,18 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
 
     plt.subplot(2, cols, index)
     plt.imshow(result_array, cmap='viridis')
-    plt.rcParams['font.size'] = 14
+    plt.rcParams['font.size'] = 18
 
     # Plot target points with improved style
     plt.scatter(dep_XArray, dep_YArray, c='red', s=20, alpha=0.8, label=f"Target (split set {index})")
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    # plt.title('Result Map')
+
 
     # Add a legend
-    plt.legend(fontsize=14)
-    cbar = plt.colorbar(shrink=0.35, aspect=30, pad=0.02)
-    cbar.ax.set_ylabel('Prediction', fontsize=14)
+    plt.legend(loc='upper left',fontsize=18)
+    cbar = plt.colorbar(shrink=1, aspect=30, pad=0.02)
+    cbar.ax.set_ylabel('Prediction', fontsize=20)
+    plt.xticks(fontsize = 16)
+    plt.yticks(fontsize = 16)
 
     # Adjust subplot spacing
     plt.tight_layout()
@@ -582,57 +546,13 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
     print(f"\t--- {t} New feature map Saved\n")
 
-def compare_baseline_result(de_arr, grid_arr, random_arr, bo_path):
-    
-    # load the saved data
-    bo_arr = np.load(bo_path)
-    # bo_f1 = bo_arr[0]
-    # bo_pre = bo_arr[1]
-
-    default_f1 = de_arr.T[0]
-    default_pre = de_arr.T[1]
-    grid_f1 = grid_arr.T[0]
-    grid_pre = grid_arr.T[1]
-    random_f1 = random_arr.T[0]
-    random_pre = random_arr.T[1]
-
-    time_arr = np.linspace(0, 39, num=40)  # Example time array
-
-    # Rest of your code
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-
-    # Modify x-values to represent time
-    # ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(bo_f1)), bo_f1, c='#FF4500', label='BO System')
-    # ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(bo_pre)), bo_pre, c='#FF4500')
-    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(default_f1)), default_f1, c='#9932CC', label='Default System', alpha=0.9)
-    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(default_pre)), default_pre, c='#9932CC', alpha=0.9)
-
-    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(random_f1)), random_f1, c='#6495ED', label='Random System', alpha=0.7)
-    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(random_pre)), random_pre, c='#6495ED', alpha=0.7)
-
-    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(grid_f1)), grid_f1, c='#FFFF00', label='Grid System', alpha=0.9)
-    ax.scatter(time_arr + np.random.uniform(-0.05, 0.05, size=len(grid_pre)), grid_pre, c='#FFFF00', alpha=0.9)
-
-    ax.set_xticks([1, 2])
-    ax.set_xticklabels(['F1', 'Precision'],  fontsize = 12)
-
-    plt.ylabel('Scores', fontsize = 12)
-    plt.gca().set_facecolor('lightgray')
-    plt.legend()
-    plt.grid(alpha = 0.5)
-    plt.xlim(0.5, 2.5)
-    plt.yticks(fontsize=12)
-    plt.savefig("./1111.png")
 
 def criterion_loss(mode, algo, X_val_fold, y_val_fold, y_train_fold = None):
     
     # the loss applied in training process
-    if mode == 'random':
-        class_weights = compute_class_weight('balanced', classes=np.unique(y_train_fold), y=y_train_fold)
-        class_weight_dict = {cls: weight for cls, weight in zip(np.unique(y_train_fold), class_weights)}
-    else:
-        class_weight_dict = 'balanced'
+    class_weights = compute_class_weight('balanced', classes=np.unique(y_val_fold), y=y_val_fold)
+    class_weight_dict = {cls: weight for cls, weight in zip(np.unique(y_val_fold), class_weights)}
+    
     def weighted_cross_entropy(y_true, y_pred, weight = 'balanced', epsilon = 1e-7):
         sample_weights = compute_sample_weight(class_weight_dict, y_true)
         y_pred = np.clip(y_pred, epsilon, 1 - epsilon)
@@ -641,3 +561,44 @@ def criterion_loss(mode, algo, X_val_fold, y_val_fold, y_train_fold = None):
                 
     weighted_ce_scorer = make_scorer(weighted_cross_entropy, greater_is_better=False)
     return weighted_ce_scorer(algo, X_val_fold, y_val_fold)
+
+def load_test_mask(name):
+    if 'ag' in name.lower():
+        return np.load('./temp/Ag_mask.npy')
+
+    if 'cu' in name.lower():
+        return np.load('./temp/Cu_mask.npy')
+    
+    if 'nova' in name.lower():
+        return np.load('./temp/Au_mask.npy')
+    
+    return
+
+def autoMPM(data_dir, run_mode = 'IID', optimize_step = 40, metrics=['auc', 'f1', 'pre']):
+    
+    if run_mode == 'IID':
+        mode = 'random'
+    else:
+        mode  = 'k_split'
+
+    path_list = os.listdir(data_dir), 
+    for name in path_list:
+        path = data_dir + '/' + name
+
+        # Automatically decide an algorithm
+        algo_list = [rfcAlgo, svmAlgo, logiAlgo, NNAlgo]
+        method = Method_select(algo_list)
+        score = method.select(data_path=path, task=Model, mode=mode)
+        algo = algo_list[score.index(max(score))]
+        print("Use" + str(algo)) 
+        
+        # Bayesian optimization process
+        bo = Bayesian_optimization(
+            data_path=path, 
+            algorithm=algo, 
+            mode=mode,
+            metrics=['auc', 'f1', 'pre'],
+            default_params= True
+            )
+        
+        x_best = bo.optimize(steps=optimize_step)
