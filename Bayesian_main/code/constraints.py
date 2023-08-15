@@ -174,7 +174,7 @@ class ParamSpace:
             y (float): Score for x
         """
 
-        self.index = 0
+        self.index = 1
         now = datetime.now().strftime('%Y%m%d_%H_%M_%S')
         self.now = now
         with open(f"./run/{name.replace('.pkl','_')}{self.now}_log.md", "w") as f:

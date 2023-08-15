@@ -25,9 +25,9 @@ class Bayesian_optimization:
     DEFAULT_WORKER = 3              # The default number of workers
     WARNING_ACQ_NUM_LOW = 30        # If acq_num is set to be lower than this, a warning will show up
     WARNING_WORKER_HIGH = 20        # If worker is set to be higher than this, a warning will show up
-    
+    PARALLEL_LIMIT = False          
 
-    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', metrics = ['auc','f1','pre'], default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER):
+    def __init__(self, data_path, task=Model, algorithm=rfcAlgo, mode='random', metrics = ['auc','f1','pre'], default_params=False, cont_book={}, disc_book={}, enum_book={}, stat_book={}, cons_value=10.0, rbf_value=10.0, acq_num=DEFAULT_ACQ_NUM, worker=DEFAULT_WORKER, fidelity=3, modify=False):
         """Initialize the target task, the algorithm to accomplish the task and settings of corresponding hyperparamters
 
         Args:
@@ -44,10 +44,12 @@ class Bayesian_optimization:
             acq_num (_type_, optional): The number of evaluation points in acquisition . Defaults to DEFAULT_ACQ_NUM.
             worker (_type_, optional): The number of workers for parallelized Bayesian. Defaults to DEFAULT_WORKER.
             metric(list): The list to record evaluation indicators beside the main one. Defaults to [].
+            fidelity (int, optional): The number repeated trials for evaluation. Defaults to 3.
+            modify(bool, optional): Whether to downsample the negatives samples to the equal number of positive samples. Defaults to be False.
             path(string): The string to record the name of data estimated.
         """
         self.gaussian = GaussianProcessRegressor(kernel=ConstantKernel(cons_value, constant_value_bounds="fixed") * RBF(rbf_value, length_scale_bounds="fixed"))
-        self.task = task(data_path=data_path, algorithm=algorithm, mode=mode, metrics=metrics)
+        self.task = task(data_path=data_path, algorithm=algorithm, fidelity=fidelity, mode=mode, metrics=metrics, modify=modify)
         
         if default_params:
             self.param_space = ParamSpace(algorithm.DEFAULT_CONTINUOUS_BOOK, algorithm.DEFAULT_DISCRETE_BOOK, algorithm.DEFAULT_ENUM_BOOK, algorithm.DEFAULT_STATIC_BOOK)
@@ -239,7 +241,6 @@ class Bayesian_optimization:
         """
         X, names = self.param_space.sample(x_num)   
         y = self.evaluate_parallel(names, x_num) 
-        # y = np.array([self.objective(x) for x in X]).reshape(-1,1)
         if isinstance(y, list):
             y = y[0]
         self.gaussian.fit(X, y)
@@ -278,13 +279,15 @@ class Bayesian_optimization:
             else:
                 self.param_space.log_head(self.path.split('/')[-1] ,name_best, y_best, self.metrics)
                             
-        for _ in range(steps):
+        for step_i in range(steps):
             x_sample, name = self.opt_acquisition(X)
             if self.worker > 1:
-                y_ground = self.evaluate_serial(name)
-                worker_best = np.max(np.where(y_ground == np.max(y_ground)))
-                # y_ground = self.evaluate_parallel(name, self.worker)
-                # worker_best = y_ground.argmax()
+                if self.PARALLEL_LIMIT:
+                    y_ground = self.evaluate_serial(name)
+                    worker_best = np.max(np.where(y_ground == np.max(y_ground)))
+                else:
+                    y_ground = self.evaluate_parallel(name, self.worker)
+                    worker_best = y_ground.argmax()
                 
                 name = name[worker_best]
                 x_sample = x_sample[worker_best]
@@ -307,10 +310,11 @@ class Bayesian_optimization:
             
             # Print the result of the current epoch
             if out_log:
-                now = time.time()
-                if len(self.accompany_metric) > 0:
-                    y_ground = [y_ground] + self.accompany_metric
-                self.param_space.log_out(self.path.split('/')[-1], name, y_ground + [now - start_time], flag)
+                if step_i > 0:
+                    now = time.time()
+                    if len(self.accompany_metric) > 0:
+                        y_ground = [y_ground] + self.accompany_metric
+                    self.param_space.log_out(self.path.split('/')[-1], name, y_ground + [now - start_time], flag)
             
             # Early stop
             if not flag:

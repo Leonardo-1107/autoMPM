@@ -16,6 +16,7 @@ from sklearn.utils.class_weight import compute_sample_weight, compute_class_weig
 import time
 import os
 import sys
+# from metric import Feature_Filter
 
 """
 The early stage data preprocess and some plot functions.
@@ -58,12 +59,12 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
     
     # More features added and filtered 
     if feature_filter:
-        dirs = os.listdir(data_dir + '/Shapefiles')
+        dirs = os.listdir(data_dir + '/TIFs')
         for feature in dirs:
             if 'tif' in feature:
                 if 'toline.tif' in feature:
                     continue
-                rst = rasterio.open(data_dir + '/Shapefiles/' + feature).read(1)
+                rst = rasterio.open(data_dir + '/TIFs/' + feature).read(1)
                 if rst.shape != mask.shape:
                     continue
                 feature_list.append(feature)
@@ -110,12 +111,10 @@ def preprocess_data(data_dir='./dataset/nefb_fb_hlc_cir', feature_list=['As', 'B
         label_arr2d = augment_2D(label_arr2d)
         label_arr = label_arr2d[mask]
     
-    # plt.savefig(f'./backup/compare_aug/{time.time()}com.png')
+    # feature filtering
     if feature_filter:
-        # Feature filtering by corr
-        feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
-        # Feature filtering by weights of RFC
-        feature_arr = feature_selecter_algo(feature_arr, label_arr)
+        feature_filter_model = Feature_Filter(input_feature_arr=feature_arr)
+        feature_arr = feature_filter_model.select_top_features(top_k=20)
 
     # Pack and save dataset
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, deposite_mask)
@@ -264,10 +263,9 @@ def preprocess_data_interpolate(data_dir='./dataset/Washington', augment:bool = 
         feature_arr[:,idx] = feature_arr2d_dict[feature_list[idx]][mask]
 
     if feature_filter:
-        # Feature filtering by corr
-        feature_arr = feature_selecter_corr(feature_arr, ground_label_arr)
-        # Feature filtering by weights of RFC
-        feature_arr = feature_selecter_algo(feature_arr, label_arr)
+        feature_filter_model = Feature_Filter(input_feature_arr=feature_arr)
+        feature_arr = feature_filter_model.select_top_features(top_k=20)
+
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, deposite_mask)
     with open(f'./data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
@@ -312,14 +310,15 @@ def make_mask(data_dir, mask_data, show =False):
     if 'nefb' in data_dir or 'tok' in data_dir or 'Washington' in data_dir:
         mask = mask_data != 0
     
-    if 'bm_lis' in data_dir:
-        mask = (mask_data < 200)
+    elif 'bm' in data_dir:
+        mask = mask_data == 1
 
-    if 'North' in data_dir:
+    elif 'North' in data_dir:
         mask = (mask_data > -1)
     
     else:
         mask = mask_data != 0
+
     if show:
         plt.figure()
         plt.imshow(mask)
@@ -355,45 +354,6 @@ def augment_2D(array, wide_mode = False):
             if (0< newx and newx < array.shape[0]) and (0< newy and newy < array.shape[1]):
                 new[newx][newy] = 1
     return new
-
-
-def feature_selecter_corr(feature_arr, label_arr):
-    """
-    Initial screening of features by calculating correlation coefficients.
-    """
-    corr_list = []
-    for i in range(feature_arr.shape[1]): 
-        feature_slice = feature_arr[:,i]
-        corr = ss.pearsonr(feature_slice, label_arr)
-        corr_list.append(corr[0])
-    
-    threshold = heapq.nlargest(50, corr_list)[49]
-    select_list = [x>= threshold for x in corr_list]
-    
-    selected_feature_arr = []
-    for i in range(feature_arr.shape[1]):
-        if select_list[i]:
-            selected_feature_arr.append(feature_arr[:,i])
-    
-    return np.array(selected_feature_arr).T
-    
-def feature_selecter_algo(feature_arr, label_arr, n = 20):
-    """
-    Fine screening of features by the weights obtained in the random forest algorithm.
-    """
-    rfc = RandomForestClassifier()
-    rfc.fit(feature_arr, label_arr)
-    
-    weights = rfc.feature_importances_
-    threshold = heapq.nlargest(n, weights)[n-1]
-    select_list = [x>= threshold for x in weights]
-    
-    selected_feature_arr = []
-    for i in range(feature_arr.shape[1]):
-        if select_list[i]:
-            selected_feature_arr.append(feature_arr[:,i])
-    
-    return np.array(selected_feature_arr).T
 
 
 def plot_roc(fpr, tpr, index, scat=False, save=True):
@@ -503,7 +463,7 @@ def plot_split_standard(common_mask, label_arr, test_mask, save_path=None):
     if save_path is not None:
         plt.savefig(save_path)
     else:
-        plt.savefig('Bayesian_main/run/spilt_standard.png')
+        plt.savefig('./run/spilt_standard.png')
 
 def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, clusters=4):
     cols = int((clusters + 0.5) / 2)
@@ -532,7 +492,7 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
 
     # Add a legend
     plt.legend(loc='upper left',fontsize=18)
-    cbar = plt.colorbar(shrink=1, aspect=30, pad=0.02)
+    cbar = plt.colorbar(shrink=0.75, aspect=30, pad=0.02)
     cbar.ax.set_ylabel('Prediction', fontsize=20)
     plt.xticks(fontsize = 16)
     plt.yticks(fontsize = 16)

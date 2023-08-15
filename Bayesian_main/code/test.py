@@ -16,10 +16,10 @@ if __name__=="__main__":
         print(name)
 
         # Automatically decide an algorithm
-        algo_list = [rfcAlgo, extAlgo, svmAlgo, NNAlgo, gBoostAlgo, logiBaggingAlgo, rfBoostAlgo, NNxgbAlgo]
-        method = Method_select(algo_list)
-        algo = method.select(data_path=path, task=Model, mode=mode)
-        
+        # algo_list = [rfcAlgo, extAlgo, svmAlgo, NNAlgo, gBoostAlgo]
+        # method = Method_select(algo_list)
+        # algo = method.select(data_path=path, task=Model, mode=mode)
+        algo = rfcAlgo
         print(f"\n{name}, Use {algo.__name__}")
         
         # algo = rfBoostAlgo

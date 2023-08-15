@@ -20,7 +20,7 @@ class Model:
     DEFAULT_TEST_CLUSTERS = 4
     WARNING_FIDELITY_HIGH = 20
     
-    def __init__(self, data_path, fidelity=3, test_clusters=4, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc'], modify = False):
+    def __init__(self, data_path, fidelity=3, test_clusters=5, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc'], modify = False):
         """Initialize the input data, algorithm for the target task, evaluation fidelity and test clusters
 
         Args:
@@ -28,7 +28,8 @@ class Model:
             fidelity (int, optional): The number repeated trials for evaluation. Defaults to 3.
             test_clusters (int, optional): The number of clusters in data split. Defaults to 4.
             algorithm (_type_, optional): The algorithm used to accomplish the target task. Defaults to rfcAlgo.
-            metrics: (list, optional): The metrics used to judege the performance.
+            metrics (list, optional): The metrics used to judege the performance.
+            modify(bool, optional): Whether to downsample the negatives samples to the equal number of positive samples. Defaults to be False.
         """
         with open(data_path, 'rb') as f:
             feature_arr, total_label, common_mask, deposit_mask = pickle.load(f)
@@ -46,6 +47,7 @@ class Model:
         self.test_index = 0
         self.metrics = metrics
         self.modify = modify
+
         return
        
     def set_test_clusters(self, test_clusters=DEFAULT_TEST_CLUSTERS):
@@ -108,13 +110,13 @@ class Model:
             
         return test_mask
             
-    def dataset_split(self, test_mask_list=None, modify=False):
+    def dataset_split(self, test_mask_list=None, modify=False, modify_fidelity=5):
 
         if test_mask_list is None:
             test_mask_list = []
             # Randomly choose the start grid
             mask_sum = self.common_mask.sum()
-            test_num = int(mask_sum / 5)
+            test_num = int(mask_sum / 5) # 3:1:1
             x_arr, y_arr = self.common_mask.nonzero()
             
             positive_x = x_arr[self.label_arr.astype(bool)].reshape((-1,1))
@@ -172,7 +174,7 @@ class Model:
                 true_num = y_train_fold.sum()
                 index = np.arange(len(y_train_fold))
                 true_train = index[y_train_fold == 1]
-                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num * 5]
+                false_train = np.random.permutation(index[y_train_fold == 0])[:true_num * modify_fidelity]
                 train = np.concatenate([true_train, false_train])
                 X_train_fold = X_train_fold[train]
                 y_train_fold = y_train_fold[train]
@@ -182,7 +184,7 @@ class Model:
             dataset_list.append(dataset)
         return tmpt, dataset_list
     
-    def random_split(self, modify =False):
+    def random_split(self, modify=False):
         """Split the dataset into train set and test set, and apply K-fold Cross-validation.
 
         Args:
@@ -223,6 +225,7 @@ class Model:
             X_val_fold, y_val_fold = np.array(X_val_fold), np.array(y_val_fold)
             if y_test_fold.sum() == 0: 
                 continue
+
             if modify:
                     true_num = y_train_fold.sum()
                     index = np.arange(len(y_train_fold))
@@ -237,19 +240,18 @@ class Model:
             
         return dataset_list 
 
-    def train(self, params, test_mask=None, modify=False):
+    def train(self, params, test_mask=None, low_fidelity=False):
         """Train a model with test-set as a rectangle
 
         Args:
             params (dict): parameters of the machine learning algorithm
             metrics (list, optional): List of metrics used for evaluation. Defaults to roc_auc_score.
             test_mask (Array, optional): The pre-prepared test mask if provided. Defaults to None.
-            modify (bool, optional): Undersample if True. Defaults to False.
+            low_fidelity (bool, optional): Whether to perform in low fidelity mode. Defaults to False.
 
         Returns:
             score_list (list): Scores for each metric
         """
-        modify = self.modify
         metrics = self.metrics
         if not isinstance(metrics, list):
             metrics = [metrics]
@@ -280,7 +282,11 @@ class Model:
             
         score_list = []
         if self.mode  == 'random':
-            dataset_list = self.random_split(modify=False)
+            if low_fidelity:
+                dataset_list = self.random_split(modify=True)
+            else:
+                dataset_list = self.random_split(modify=self.modify)
+
             for dataset in dataset_list:
                 X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
@@ -289,28 +295,22 @@ class Model:
                 
                 loss = criterion_loss(self.mode, algo, X_val_fold, y_val_fold, y_train_fold)
                 scores.append(loss)
-                # val_pred, val_prob_pred = algo.predicter(X_val_fold)
-                # scores.append(recall_score(y_val_fold, val_pred))
                     
                 # testing
-                pred_arr, y_arr = algo.predicter(X_test_fold)
-             
-                for metric in metric_list:
-                    if metric != roc_auc_score:
-                        score = metric(y_true=y_test_fold, y_pred=pred_arr)
-                        scores.append(score) 
-                    else:
-                        score = metric(y_test_fold, y_arr)
-                        scores.append(score)
+                if not low_fidelity:
+                    scores.extend(self.test(algo, metric_list, X_test_fold, y_test_fold))
 
                 if len(scores) == 1:
                     scores = scores[0]
                 score_list.append(scores)
             
         else: 
-            test_mask = load_test_mask(self.path)
-            test_mask, dataset_list = self.dataset_split(test_mask, modify=True)
-            y_arr_record = []
+            # test_mask = load_test_mask(self.path)
+            if low_fidelity:
+                test_mask, dataset_list = self.dataset_split(test_mask, modify=True, modify_fidelity=1)
+            else:
+                test_mask, dataset_list = self.dataset_split(test_mask, modify=True)
+
             for dataset in dataset_list:
                 X_train_fold, y_train_fold, X_val_fold, y_val_fold, X_test_fold, y_test_fold = dataset
                 algo = self.algorithm(params)
@@ -322,24 +322,29 @@ class Model:
                 scores.append(ood_loss)
                 
                 # testing
-                pred_arr, y_arr = algo.predicter(X_test_fold)
+                if not low_fidelity:
+                    scores.extend(self.test(algo, metric_list, X_test_fold, y_test_fold))
                 
-                for metric in metric_list:
-                    if metric != roc_auc_score:
-                        score = metric(y_true=y_test_fold, y_pred=pred_arr)
-                        scores.append(score)
-                    else:
-                        score = metric(y_test_fold, y_arr)
-                        scores.append(score)    
-
                 if len(scores) == 1:
                     scores = scores[0]
                 score_list.append(scores)
 
-                _, y_arr_feature_map = algo.predicter(self.feature_arr)
-                y_arr_record.append(y_arr_feature_map)
-            
         return score_list
+
+    def test(self, algo, metric_list, X_test_fold, y_test_fold):
+
+        scores =  []
+        pred_arr, y_arr = algo.predicter(X_test_fold)
+                
+        for metric in metric_list:
+            if metric != roc_auc_score:
+                score = metric(y_true=y_test_fold, y_pred=pred_arr)
+                scores.append(score)
+            else:
+                score = metric(y_test_fold, y_arr)
+                scores.append(score)    
+
+        return scores
 
     def obj_train_parallel(self, queue, args):
         """Encapsulation for parallelizing the repeated trials
@@ -348,8 +353,12 @@ class Model:
             queue (Queue): Store the output of processes
             args (_type_): Args for algorithm
         """
-        score = self.train(args)
-        queue.put(score)
+
+        # mylti-fidelity in training process
+        score = self.train(args, low_fidelity=True)
+        if np.mean(score) < - 1.5:
+            score = self.train(args, low_fidelity=False)
+            queue.put(score)
         return
     
     def evaluate(self, x):

@@ -61,7 +61,6 @@ class svmAlgo(SVC):
     def __init__(self, params):
         super().__init__(**params)
         self.params = params
-        self.params['probability'] = True
 
     def predicter(self, X):
         pred = self.predict(X)
@@ -72,7 +71,7 @@ class svmAlgo(SVC):
 
 class rfcAlgo(RandomForestClassifier):
     DEFAULT_CONTINUOUS_BOOK = {}
-    DEFAULT_DISCRETE_BOOK = {'n_estimators': [10, 150], 'max_depth': [5, 50]}
+    DEFAULT_DISCRETE_BOOK = {'n_estimators': [10, 150], 'max_depth': [10, 50]}
     DEFAULT_ENUM_BOOK = {'criterion': ['gini', 'entropy']}
     DEFAULT_STATIC_BOOK = {} 
     
@@ -92,7 +91,7 @@ class rfcAlgo(RandomForestClassifier):
     
 class extAlgo(ExtraTreesClassifier):
     DEFAULT_CONTINUOUS_BOOK = {}
-    DEFAULT_DISCRETE_BOOK = {'n_estimators': [10, 200], 'max_depth': [5, 60]}
+    DEFAULT_DISCRETE_BOOK = {'n_estimators': [10, 200], 'max_depth': [10, 50]}
     DEFAULT_ENUM_BOOK = {'criterion': ['gini', 'entropy']}
     DEFAULT_STATIC_BOOK = {}
 
@@ -134,7 +133,7 @@ class rfBoostAlgo(AdaBoostClassifier):
     def __init__(self, params):
         super().__init__(**params)
         self.params = params
-        self.estimator = RandomForestClassifier(n_estimators=50, max_depth=10, n_jobs=-1)
+        self.estimator = RandomForestClassifier(n_estimators=10)
 
     def predicter(self, X):
         pred = self.predict(X)
@@ -367,7 +366,7 @@ class lgbmAlgo(BaseEstimator, ClassifierMixin):
         'learning_rate': [0.01, 0.05, 0.1],
         'metric': ['binary_logloss', 'auc']
     }
-    DEFAULT_STATIC_BOOK = {}      # Add default static hyperparameters if needed
+    DEFAULT_STATIC_BOOK = {'force_col_wise':True}      # Add default static hyperparameters if needed
 
     def __init__(self, params):
         # binary task

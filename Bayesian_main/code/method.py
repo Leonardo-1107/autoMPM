@@ -21,8 +21,9 @@ class Method_select:
         self.opt_score = -100
 
     def evaluate_algo(self, algo, data_path, task, mode):
-        # print(f'Evalauting {algo.__name__} Model')
-        bo = Bayesian_optimization(data_path, task, algo, mode=mode, default_params=True, worker=3)
+        # low-fidelity estimation for method selection
+        
+        bo = Bayesian_optimization(data_path, task, algo, mode=mode, default_params=True, fidelity=1, worker=3, modify=True)
         best, X, y = bo.optimize(steps=5, out_log=False, return_trace=True)
         score = np.mean(y)
         print(f'{algo.__name__}, score: {score:.4f}')
