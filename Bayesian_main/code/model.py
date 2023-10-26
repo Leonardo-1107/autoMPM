@@ -281,7 +281,7 @@ class Model:
             metric_list.append(metric)
             
         score_list = []
-        if self.mode  == 'random':
+        if self.mode  == 'IID':
             if low_fidelity:
                 dataset_list = self.random_split(modify=True)
             else:
@@ -334,7 +334,7 @@ class Model:
     def test(self, algo, metric_list, X_test_fold, y_test_fold):
 
         scores =  []
-        pred_arr, y_arr = algo.predicter(X_test_fold)
+        pred_arr, y_arr = algo.predictor(X_test_fold)
                 
         for metric in metric_list:
             if metric != roc_auc_score:

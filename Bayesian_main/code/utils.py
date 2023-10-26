@@ -270,9 +270,9 @@ def preprocess_data_interpolate(data_dir='./dataset/Washington', augment:bool = 
     with open(f'./data/Washington_{method}.pkl', 'wb') as f:
         pickle.dump(dataset, f)
 
-def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mask_dir='Mask.npy', label_path_list=['Target.npy'], augment=True, output_path = './data_benchmark/Nova.pkl'):
+def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mask_dir='Mask.npy', label_path_list=['Target.npy'], augment=False, output_path = './data_benchmark/Nova.pkl'):
     # Process the NovaScotia2 Data
-    feature_list = ['Anticline_Buffer', 'Anticline_Buffer', 'As', 'Li', 'Pb', 'F', 'Cu', 'W', 'Zn']
+    feature_list = ['Godenville_Formation_Buffer', 'Anticline_Buffer', 'As', 'Li', 'Pb', 'F', 'Cu', 'W', 'Zn']
     feature_dict = {}
     for feature in feature_list:
         rst = np.load(data_dir+f'/{feature_prefix}{feature}{feature_suffix}')
@@ -303,6 +303,8 @@ def preprocess_Nova_data(data_dir, feature_prefix='', feature_suffix='.npy', mas
     dataset = (feature_arr, np.array([ground_label_arr, label_arr]), mask, depositMask)
     with open(output_path, 'wb') as f:
         pickle.dump(dataset, f)
+    
+    return dataset
 
 
 def make_mask(data_dir, mask_data, show =False):
@@ -324,7 +326,8 @@ def make_mask(data_dir, mask_data, show =False):
         plt.imshow(mask)
         plt.colorbar()
         name = data_dir.replace('/','')
-        plt.savefig(f'./backup/mask_{name}.png')
+        plt.title("Mask")
+        # plt.savefig(f'./backup/mask_{name}.png')
 
     return mask
 

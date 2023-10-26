@@ -201,7 +201,7 @@ class ParamSpace:
             f.write("--- | ")
             for i in range(len(self.name_list)):
                 f.write(f"--- | ")
-            f.write("--- | --- | --- | --- | --- | --- | --- | \n")
+            f.write("--- | --- | --- | --- | --- | --- | \n")
         self.log_out(name, x, y, True)
 
             

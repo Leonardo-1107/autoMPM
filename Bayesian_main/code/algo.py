@@ -25,8 +25,8 @@ class logiAlgo(LogisticRegression):
     def __init__(self, params):
         super().__init__(**params)
         self.params = params
-    
-    def predicter(self, X):   
+        
+    def predictor(self, X):   
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -44,7 +44,7 @@ class NNAlgo(MLPClassifier):
         super().__init__(**params)
         self.params = params
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -62,7 +62,7 @@ class svmAlgo(SVC):
         super().__init__(**params)
         self.params = params
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -79,10 +79,8 @@ class rfcAlgo(RandomForestClassifier):
         super().__init__(**params)
         self.params = params
 
-    def predicter(self, X, save_weight = False):
-        # Output the pred layer and the proba layer simultaneously
-        if save_weight:
-            np.save('Bayesian_main/weights.npy', self.feature_importances_)
+    def predictor(self, X):
+
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -99,7 +97,7 @@ class extAlgo(ExtraTreesClassifier):
         super().__init__(**params)
         self.params = params
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -117,7 +115,7 @@ class gBoostAlgo(GradientBoostingClassifier):
         super().__init__(**params)
         self.params = params
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -135,7 +133,7 @@ class rfBoostAlgo(AdaBoostClassifier):
         self.params = params
         self.estimator = RandomForestClassifier(n_estimators=10)
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -154,7 +152,7 @@ class svmBoostAlgo(AdaBoostClassifier):
         self.params['algorithm'] = 'SAMME'
         self.estimator = SVC(C=0.8, kernel='linear', max_iter=2000, probability=True)
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -172,7 +170,7 @@ class logiBoostAlgo(AdaBoostClassifier):
         self.params = params
         self.estimator = LogisticRegression(C=0.1, penalty='l2', solver='saga', max_iter=500)
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -191,7 +189,7 @@ class dtBoostAlgo(AdaBoostClassifier):
         
         self.estimator = DecisionTreeClassifier(max_depth=5)
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -217,7 +215,7 @@ class svmBaggingAlgo(BaggingClassifier):
         super().__init__(estimator=base_estimator, **bagging_params)
         self.params = params
     
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -242,7 +240,7 @@ class logiBaggingAlgo(BaggingClassifier):
         super().__init__(estimator=base_estimator, **bagging_params)
         self.params = params
     
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -267,7 +265,7 @@ class NNBaggingAlgo(BaggingClassifier):
         super().__init__(estimator=base_estimator, **bagging_params)
         self.params = params
     
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -308,7 +306,7 @@ class xgbAlgo(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         return self.model.predict_proba(X)
 
-    def predicter(self, X):
+    def predictor(self, X):
         return self.model.predict(X), self.model.predict_proba(X)[:, 1]
     
 class NNxgbAlgo(MLPClassifier):
@@ -321,7 +319,7 @@ class NNxgbAlgo(MLPClassifier):
         super().__init__(**params)
         self.params = params
 
-    def predicter(self, X):
+    def predictor(self, X):
         pred = self.predict(X)
         y = self.predict_proba(X)
         if isinstance(y, list):
@@ -385,5 +383,5 @@ class lgbmAlgo(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         return self.model.predict_proba(X)
 
-    def predicter(self, X):
+    def predictor(self, X):
         return self.model.predict(X), self.model.predict_proba(X)[:, 1]

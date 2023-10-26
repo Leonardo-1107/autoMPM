@@ -9,7 +9,7 @@ os.chdir('Bayesian_main')
 
 if __name__=="__main__":
     data_dir = 'data/common'
-    mode = 'random'
+    mode = 'IID'
     path_list = os.listdir(data_dir)
     for name in path_list:
         path = data_dir + '/' + name

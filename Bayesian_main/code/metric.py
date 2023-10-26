@@ -97,7 +97,7 @@ class Feature_Filter:
         return shapley_list
     
     def select_top_features(self, top_k=20):
-        """Select the top-k features based on Shapley values
+        """Select the top-k features 
 
         Args:
             shapley_list (list): List of Shapley values for each feature.
