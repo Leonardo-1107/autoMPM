@@ -11,7 +11,7 @@ if __name__=="__main__":
 
     ############### TODO ###################
 
-    data_dir = 'data/common'                                            # the location of dataset
+    data_dir = 'data'                                                   # the location of dataset
     mode = 'OOD'                                                        # test mod. Default to be OOD
 
     optimization_steps = 100                                            # optimization steps. Default to be 100
