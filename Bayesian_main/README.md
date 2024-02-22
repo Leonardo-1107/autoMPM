@@ -10,6 +10,7 @@ conda activate autompm
 
 ### 2. Install all the necessary packages
 ```
+# This will generally take few minutes to install
 conda install requirements.txt
 ```
 
@@ -21,7 +22,8 @@ python Bayesian_main/code/test.py
 
 ### 4. Check the result in Bayesian_main/run
 ```
-The result will be stored as .md files
+The result will be stored as .md files.
+It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
 ```
 
 ## II. Code Files
