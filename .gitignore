@@ -1,11 +1,11 @@
 .vscode
 Bayesian_main/backup
-Bayesian_main/data
+Bayesian_main/data/common
+Bayesian_main/data/other
+Bayesian_main/data/tested
 Bayesian_main/data_benchmark
 Bayesian_main/expertdata
 Bayesian_main/dataset
-Bayesian_main/run
-Bayesian_main/feature_filter.ipynb
 Bayesian_main/interp_test.py
 Bayesian_main/Nova_data.py
 Bayesian_main/pkl_transform.py

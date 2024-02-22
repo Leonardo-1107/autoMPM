@@ -310,7 +310,7 @@ class Bayesian_optimization:
             
             # Print the result of the current epoch
             if out_log:
-                if step_i > 0:
+                if step_i > 1:
                     now = time.time()
                     if len(self.accompany_metric) > 0:
                         y_ground = [y_ground] + self.accompany_metric

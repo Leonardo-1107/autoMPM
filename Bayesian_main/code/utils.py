@@ -17,6 +17,7 @@ import time
 import os
 import sys
 # from metric import Feature_Filter
+from interpolation import interp_opt
 
 """
 The early stage data preprocess and some plot functions.
@@ -237,25 +238,12 @@ def preprocess_data_interpolate(data_dir='./dataset/Washington', augment:bool = 
     for feature in feature_list:
         print(f'Processing {feature}')
         z = geochemistry[feature].values
-        if method == 'kriging':
-            
-            OK = pykrige.OrdinaryKriging(
-                x_geo,
-                y_geo,
-                z,
-                variogram_model="gaussian",  
-            )
-            gridX = np.linspace(np.min(x_geo), np.max(x_geo), x_max)
-            gridY = np.linspace(np.min(y_geo), np.max(y_geo), y_max)
-            feature_dict[feature], _ = OK.execute("grid", gridX, gridY)
-            feature_dict[feature] = feature_dict[feature].T
-            print('Feature checking:  ', feature_dict[feature].shape == mask.shape)
-        else:
-            f = interp2d(x_geo, y_geo, z, kind=method)
-            for x in range(x_max):
-                for y in range(y_max):
-                    if feature_dict[feature][x, y] == 0:
-                        feature_dict[feature][x, y] = f(x, y)
+
+        # interp optimization
+        interpOPT = interp_opt()
+        result = interpOPT.optimize(x_geo, y_geo, z, x_max, y_max)
+
+        feature_dict[feature] = result
             
     feature_arr2d_dict = feature_dict.copy()
     feature_arr = np.zeros((mask.sum(),len(feature_list)))
@@ -490,12 +478,12 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
     plt.rcParams['font.size'] = 18
 
     # Plot target points with improved style
-    plt.scatter(dep_XArray, dep_YArray, c='red', s=20, alpha=0.8, label=f"Target (split set {index})")
+    plt.scatter(dep_XArray, dep_YArray, c='red', s=20, alpha=0.5, label=f"Target (split set {index})")
 
 
     # Add a legend
     plt.legend(loc='upper left',fontsize=18)
-    cbar = plt.colorbar(shrink=0.75, aspect=30, pad=0.02)
+    cbar = plt.colorbar(shrink=0.9, aspect=30, pad=0.02)
     cbar.ax.set_ylabel('Prediction', fontsize=20)
     plt.xticks(fontsize = 16)
     plt.yticks(fontsize = 16)
@@ -505,7 +493,7 @@ def show_result_map(result_values, mask, deposit_mask, test_mask=None, index=0, 
     plt.gca().set_facecolor('lightgray')
 
     # Save the figure
-    plt.savefig('Bayesian_main/run/figs/result_map.png', dpi=300)
+    plt.savefig('./Bayesian_main/run/figs/result_map.png', dpi=300)
     t = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
     print(f"\t--- {t} New feature map Saved\n")
 
@@ -537,31 +525,55 @@ def load_test_mask(name):
     
     return
 
-def autoMPM(data_dir, run_mode = 'IID', optimize_step = 40, metrics=['auc', 'f1', 'pre']):
+
+def get_feature_importance_by_shap(file_path, per=15):
+    '''
+    Get the feature importance by shap values
+    file_path: the location where the shap_values are saved
+    per: the percentage of features to be filtered by shap values
+    return: the indices of features to be selected
+    '''
+    shap_values = np.load(file_path, allow_pickle=True)
+    shap_values = [shap_values[0], shap_values[1]]
+
+
+     
+    feature_importance = np.abs(shap_values).mean(0)
     
-    if run_mode == 'IID':
-        mode = 'random'
-    else:
-        mode  = 'k_split'
+    threshold = np.percentile(feature_importance, per)
+    selected_features = feature_importance > threshold
+    top_per_indices = np.argsort(np.sum(selected_features, axis=0))[::-1][:int((1-per/100)*selected_features.shape[1])]
+    return top_per_indices,shap_values
 
-    path_list = os.listdir(data_dir), 
-    for name in path_list:
-        path = data_dir + '/' + name
 
-        # Automatically decide an algorithm
-        algo_list = [rfcAlgo, svmAlgo, logiAlgo, NNAlgo]
-        method = Method_select(algo_list)
-        score = method.select(data_path=path, task=Model, mode=mode)
-        algo = algo_list[score.index(max(score))]
-        print("Use" + str(algo)) 
-        
-        # Bayesian optimization process
-        bo = Bayesian_optimization(
-            data_path=path, 
-            algorithm=algo, 
-            mode=mode,
-            metrics=['auc', 'f1', 'pre'],
-            default_params= True
-            )
-        
-        x_best = bo.optimize(steps=optimize_step)
+import shap
+def get_shap(algo, feature_array, mask = None):
+    '''
+    output the shapely values by the python shap package
+    mask: to filter the input feature array. example: indices_of_all_positive
+    '''
+
+    if mask is not None:
+        feature_array = feature_array[mask]
+
+    try:   
+        explainer = shap.Explainer(algo)
+        shap_values = explainer.shap_values(feature_array)    
+        values = shap_values[1]
+    except:
+        explainer = shap.Explainer(algo.predict,feature_array)
+        shap_values = explainer(feature_array)
+        values = np.array(shap_values.values)
+
+    return values
+
+
+def shap_draw(shap_values, feature_array, feature_names_list, name = 'default_shap_name'):
+    '''
+    draw the shap value map
+    '''
+
+    plt.figure()
+    shap.summary_plot(shap_values, feature_array, feature_names=feature_names_list)
+    plt.savefig(f'{name}.png')
+    

@@ -43,13 +43,31 @@ class NNAlgo(MLPClassifier):
     def __init__(self, params):
         super().__init__(**params)
         self.params = params
+        self.idx_number = 0
+
 
     def predictor(self, X):
+
         pred = self.predict(X)
         y = self.predict_proba(X)
+        # Print shapes for debugging
         if isinstance(y, list):
             y = y[0]
         return pred, y[:,1]
+    
+    def hidden_layer_output(self, X):
+        hidden_layer_outputs = []
+        for i in range(len(self.coefs_)-1):
+            X = np.dot(X, self.coefs_[i])
+            X = X + self.intercepts_[i]
+            X = np.tanh(X)  # assuming you're using tanh as the activation function
+            hidden_layer_outputs.append(X)
+        return hidden_layer_outputs
+    
+    def mid_predict(self, X):
+        
+        return self.hidden_layer_output(X)[1][:,self.idx_number]
+
 
 
 class svmAlgo(SVC):
@@ -124,14 +142,14 @@ class gBoostAlgo(GradientBoostingClassifier):
 
 class rfBoostAlgo(AdaBoostClassifier):
     DEFAULT_CONTINUOUS_BOOK = {'learning_rate': [0.01, 0.5]}
-    DEFAULT_DISCRETE_BOOK = {'n_estimators': [50, 150]}
+    DEFAULT_DISCRETE_BOOK = {'n_estimators': [10, 150]}
     DEFAULT_ENUM_BOOK = {}
     DEFAULT_STATIC_BOOK = {}
     
     def __init__(self, params):
         super().__init__(**params)
         self.params = params
-        self.estimator = RandomForestClassifier(n_estimators=10)
+        self.estimator = RandomForestClassifier(n_estimators=10, max_depth=5)
 
     def predictor(self, X):
         pred = self.predict(X)

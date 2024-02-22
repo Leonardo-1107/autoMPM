@@ -20,7 +20,7 @@ class Model:
     DEFAULT_TEST_CLUSTERS = 4
     WARNING_FIDELITY_HIGH = 20
     
-    def __init__(self, data_path, fidelity=3, test_clusters=5, algorithm=rfcAlgo, mode='random', metrics =['f1','pre','auc'], modify = False):
+    def __init__(self, data_path, fidelity=3, test_clusters=5, algorithm=rfcAlgo, mode='IID', metrics =['f1','pre','auc'], modify = False):
         """Initialize the input data, algorithm for the target task, evaluation fidelity and test clusters
 
         Args:
