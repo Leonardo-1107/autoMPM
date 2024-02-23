@@ -40,6 +40,11 @@ pip install GDAL
 > https://mothergeo-py.readthedocs.io/en/latest/development/how-to/gdal-ubuntu-pkg.html
 
 ### 4. Run the file and check the result
+Install from Github
+```
+git clone https://github.com/Leonardo-1107/autoMPM.git
+cd autoMPM
+```
 
 #### (1) Data preprocess
 High computer memory (>=32GB) and CPU performance required. This will generally take 10-20 minutes to finnish.
