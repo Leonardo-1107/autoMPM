@@ -521,7 +521,7 @@ def load_test_mask(name):
         return np.load('./temp/Cu_mask.npy')
     
     if 'nova' in name.lower():
-        return np.load('./temp/Au_mask.npy')
+        return np.load('./temp/New_Nova_mask.npy')
     
     return
 

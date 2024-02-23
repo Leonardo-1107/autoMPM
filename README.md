@@ -1,8 +1,17 @@
 # AutoMPM Guide
 
-**Project Website** : https://tempmpm.readthedocs.io/en/latest/mpm.html
+---
 ## I. Operating Instructions
-### 1. Create the virtual python environment
+### Hardware Requirements
+> - RAM (>=32GB) 
+> - Recommended: CPU (>= 4 GHz)
+
+### Software Requirements
+
+This software is supported for **Linux**.
+> - Ubuntu 20.04
+> - The installation tool will be **Anaconda** , to install Anaconda: https://docs.anaconda.com/free/anaconda/install/linux/
+### 1. Create the virtual python environment 
 ```
 conda create --name autompm python=3.8
 conda activate autompm
@@ -14,18 +23,43 @@ conda activate autompm
 conda install requirements.txt
 ```
 
-### 3. Run the file
+### 3. Install a special package for preprocessing
+```
+# This will generally take around 10-30 minutes to install
+
+sudo add-apt-repository ppa:ubuntugis/ppa && sudo apt-get update
+sudo apt-get update
+sudo apt-get install gdal-bin
+sudo apt-get install libgdal-dev
+export CPLUS_INCLUDE_PATH=/usr/include/gdal
+export C_INCLUDE_PATH=/usr/include/gdal
+pip install GDAL
+```
+
+> Detailed instruction web: 
+> https://mothergeo-py.readthedocs.io/en/latest/development/how-to/gdal-ubuntu-pkg.html
+
+### 4. Run the file and check the result
+
+#### (1) Data preprocess
+High computer memory (>=32GB) and CPU performance required. This will generally take 10-20 minutes to finnish.
+```
+cd Bayesian_main/dataset/Nova
+python preprocessing.py
+```
+#### (2) Bayesian Optimization
+It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
 ```
 # you could modify the configuration in Bayesian_main/code/test.py
 python Bayesian_main/code/test.py
 ```
 
-### 4. Check the result in Bayesian_main/run
+#### (3) Check the result in Bayesian_main/run
 ```
 The result will be stored as .md files.
-It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
 ```
 
+---
 ## II. Code Files
 
 + **optimization.py**:  Bayesian optimization realized
@@ -38,6 +72,7 @@ It may take about 5 seconds for each optimization step on the given dataset, dep
 + **test.py**:  The template code to run
 + **utils.py**:  Data pre-process and visualization
 
+---
 ## III. Functions 
 ### 1. Preprocess
 The explanation of some functions in **utils.py**:

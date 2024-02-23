@@ -305,7 +305,7 @@ class Model:
                 score_list.append(scores)
             
         else: 
-            # test_mask = load_test_mask(self.path)
+            test_mask = load_test_mask(self.path)
             if low_fidelity:
                 test_mask, dataset_list = self.dataset_split(test_mask, modify=True, modify_fidelity=1)
             else:
