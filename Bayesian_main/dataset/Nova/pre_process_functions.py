@@ -151,7 +151,9 @@ def vector_buffering(input_layer_path, buffer_distance) -> ogr.DataSource:
     ds = driver.Open(input_layer_path, 1)
     lyr = ds.GetLayer()
     
-    out_ds = ogr.GetDriverByName('Memory').CreateDataSource('buffered_data')
+    # Create a temporary shapefile on disk
+    temp_output_path = 'buffered_data.shp'
+    out_ds = driver.CreateDataSource(temp_output_path)
     out_lyr = out_ds.CreateLayer('buffered_layer', lyr.GetSpatialRef(), geom_type=ogr.wkbPolygon)
 
     feature_define = lyr.GetLayerDefn()
@@ -162,9 +164,8 @@ def vector_buffering(input_layer_path, buffer_distance) -> ogr.DataSource:
         buffer_geom = out_geom.Buffer(buffer_distance)
         out_feat.SetGeometry(buffer_geom)
         out_lyr.CreateFeature(out_feat)
-        
-    return out_ds
 
+    return temp_output_path  # Return the path of the temporary shapefile
 
 def vector_to_raster_mask(input_ds, input_mask_path, output_layer_path, field=''):
 

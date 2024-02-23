@@ -47,10 +47,10 @@ cd autoMPM
 ```
 
 #### (1) Data preprocess
-High computer memory (>=32GB) and CPU performance required. This will generally take 10-20 minutes to finnish.
+High CPU performance recommanded. This will generally take 20 minutes to finnish.
 ```
 cd Bayesian_main/dataset/Nova
-python preprocessing.py
+python Preprocessing.py
 ```
 #### (2) Bayesian Optimization
 It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
