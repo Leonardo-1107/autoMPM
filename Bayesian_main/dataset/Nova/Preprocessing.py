@@ -74,10 +74,10 @@ if __name__ == "__main__":
     
     # finally output the packed dataset
     preprocessor.make_dataset(
-        feature_list=['anticline_distance.tif', 'intersection_distance.tif', 'as_ok.tif', 'cu_ok.tif', 'pb_ok.tif', 'zn_ok.tif'],
+        feature_list=["anticline_distance.tif", "intersection_distance.tif", "COPPER_ok", "LEAD_ok", "ZINC_ok", "ARSENIC_ok"],
         mask_file='basemap.tif',
         label_file='label_buffer.tif',
-        output_name='Bayesian_main\data\NewNova')
+        output_name='Bayesian_main/data/NewNova')
 
 
 
