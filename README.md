@@ -24,8 +24,14 @@ conda install requirements.txt
 ```
 
 ### 3. Install a special package for preprocessing
+
+This will generally take around 10-30 minutes to install
 ```
-# This will generally take around 10-30 minutes to install
+pip install --global-option=build_ext --global-option="-I/usr/include/gdal" GDAL==`gdal-config --version`
+```
+
+If the command above failed, use the commands below instead:
+```
 
 sudo add-apt-repository ppa:ubuntugis/ppa && sudo apt-get update
 sudo apt-get update
@@ -52,6 +58,8 @@ High CPU performance recommanded. This will generally take 20 minutes to finnish
 cd Bayesian_main/dataset/Nova
 python Preprocessing.py
 ```
+Following the completion of this operation, a packed dataset, in the *.pkl* file form, will be stored within the *Bayesian_main/data* directory.
+
 #### (2) Bayesian Optimization
 It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
 ```
@@ -82,8 +90,6 @@ The result will be stored as .md files.
 ### 1. Preprocess
 The explanation of some functions in **utils.py**:
 + **preprocess_data**：The standard function to preprocess raw data.
-+ **preprocess_all_data**: Preprocess the raw data of all datasets, excluding *Washington*.
-+ **preprocess_data_interpolate**: For dataset *Washington*.
 + **show_result_map**：To demonstrate the predict result.
 
 ### 2. Algorithm Prediction 

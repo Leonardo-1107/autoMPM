@@ -71,13 +71,13 @@ if __name__ == "__main__":
 
     # make the labels
     preprocessor.make_labels_files('deposit.shp', 3000, 'label_buffer.tif')
-
+    
     # finally output the packed dataset
     preprocessor.make_dataset(
         feature_list=['anticline_distance.tif', 'intersection_distance.tif', 'as_ok.tif', 'cu_ok.tif', 'pb_ok.tif', 'zn_ok.tif'],
         mask_file='basemap.tif',
         label_file='label_buffer.tif',
-        output_name='NewNova')
+        output_name='Bayesian_main\data\NewNova')
 
 
 
