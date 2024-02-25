@@ -7,12 +7,20 @@ import warnings
 warnings.filterwarnings("ignore")
 os.chdir('Bayesian_main')
 
+import threading
+
+# Set the maximum number of threads
+MAX_THREADS = 64
+
+# Semaphore to control the number of threads
+# thread_semaphore = threading.BoundedSemaphore(MAX_THREADS)
+
 if __name__=="__main__":
 
     ############### TODO ###################
 
     data_dir = 'data'                                                   # the location of dataset
-    mode = 'OOD'                                                        # test mod. Default to be OOD
+    mode = 'IID'                                                        # test mod. Default to be IID
 
     optimization_steps = 100                                            # optimization steps. Default to be 100
     early_stop = 20                                                     # early stop number. Deafult to be 20
