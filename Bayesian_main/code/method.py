@@ -2,6 +2,7 @@ from algo import *
 from optimization import Bayesian_optimization
 import numpy as np
 from model import Model
+import multiprocessing
 from multiprocessing import Process, Manager
 import concurrent.futures
 
@@ -24,26 +25,18 @@ class Method_select:
         # low-fidelity estimation for method selection
         
         bo = Bayesian_optimization(data_path, task, algo, mode=mode, default_params=True, fidelity=1, worker=3, modify=True)
-        best, X, y = bo.optimize(steps=5, out_log=False, return_trace=True)
+        best, X, y = bo.optimize(steps=3, out_log=False, return_trace=True)
         score = np.mean(y)
         print(f'{algo.__name__}, score: {score:.4f}')
         return score
 
     def select(self, data_path, task, mode):
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-            future_to_algo = {executor.submit(self.evaluate_algo, algo, data_path, task, mode): algo for algo in self.algos}
+        for algo in self.algos:
             
-            for future in concurrent.futures.as_completed(future_to_algo):
-                algo = future_to_algo[future]
-                try:
-                    score = future.result()
-                    if score > self.opt_score:
-                        self.best_algo = algo
-                        self.opt_score = score
-                        
-                except Exception as exc:
-                    print(f'Error while evaluating {algo.__name__} Model: {exc}')
+            score = self.evaluate_algo(algo, data_path, task, mode)
+            if score > self.opt_score:
+                self.best_algo = algo
+                self.opt_score = score
 
         return self.best_algo
     
