@@ -517,13 +517,14 @@ def load_test_mask(name):
     if 'ag' in name.lower():
         return np.load('./temp/Ag_mask.npy')
 
-    if 'cu' in name.lower():
+    elif 'cu' in name.lower():
         return np.load('./temp/Cu_mask.npy')
     
-    if 'nova' in name.lower():
+    elif 'nova' in name.lower():
         return np.load('./temp/New_Nova_mask.npy')
     
-    return
+    else:
+        return np.load('./temp/Au_mask.npy')
 
 
 def get_feature_importance_by_shap(file_path, per=15):

@@ -58,10 +58,10 @@ High CPU performance recommanded. This will generally take 20 minutes to finnish
 cd Bayesian_main/dataset/Nova
 python Preprocessing.py
 ```
-Following the completion of this operation, a packed dataset, in the *.pkl* file form, will be stored within the *Bayesian_main/data* directory.
+Following the completion of this operation, a packed dataset, in the *.pkl* file form, will be stored.
 
 #### (2) Bayesian Optimization
-It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
+We have already uploaded an example dataset. It may take about 5 seconds for each optimization step on the given dataset, depending on your computer’s CPU speed.
 ```
 # you could modify the configuration in Bayesian_main/code/test.py
 python Bayesian_main/code/test.py
