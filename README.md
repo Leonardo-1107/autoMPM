@@ -8,11 +8,10 @@
 
 ### Software Requirements
 
-This software is supported for **Linux**.
-> - Ubuntu 20.04
+This software is supported for various platforms **Linux**, **Windows**, **MacOS**.
+> - Ubuntu 20.04 is recommended.
 > - The installation tool will be **Anaconda** , to install Anaconda: https://docs.anaconda.com/free/anaconda/install/linux/
 
-We  recommend using Ubuntu 20.04. as some packages such as GDAL will be easier to install while other operation systems, such as Win and Mac, should be able to work as well.
 
 ### 1. Create the virtual python environment 
 ```
@@ -47,6 +46,8 @@ pip install GDAL
 
 > Detailed instruction web: 
 > https://mothergeo-py.readthedocs.io/en/latest/development/how-to/gdal-ubuntu-pkg.html
+
+We  recommend using Ubuntu 20.04. as some packages such as GDAL will be easier to install while other operation systems, such as Win and Mac, should be able to work as well.
 
 ### 4. Run the file and check the result
 Install from Github
