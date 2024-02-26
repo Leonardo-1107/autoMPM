@@ -77,9 +77,9 @@ if __name__ == "__main__":
         feature_list=["anticline_distance.tif", "intersection_distance.tif", "COPPER_ok", "LEAD_ok", "ZINC_ok", "ARSENIC_ok"],
         mask_file='basemap.tif',
         label_file='label_buffer.tif',
-        output_name='Bayesian_main/data/NewNova')
+        output_name='NewNova')
 
-
+ 
 
 
 
